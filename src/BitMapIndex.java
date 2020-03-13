@@ -1,39 +1,41 @@
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Map.Entry;
 import java.util.SortedMap;
+import java.util.StringJoiner;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 public class BitMapIndex {
 
-  public BitMapIndex() {
+  public final int RECORD_SIZE = 101;
+  private File file;
+  private int numberOfRecords;
+
+  public BitMapIndex(String fileLocation) {
+    file = new File(fileLocation);
+    numberOfRecords = (int) (file.length() / RECORD_SIZE);
   }
 
   int log2(int x) {
     return (int) (Math.log(x) / Math.log(2));
   }
 
-  public void createIndex(String fileLocation) throws IOException {
-    Path filePath = Paths.get(fileLocation);
-    String fileName = filePath.getFileName().toString();
-    decodeRunLength("1110110111101101");
-    Path empIdIndexPath = Paths.get("data/output/index/empId-index-" + fileName);
-    Path dateIndexPath = Paths.get("data/output/index/date-index-" + fileName);
-    Path genderIndexPath = Paths.get("data/output/index/gender-index-" + fileName);
-    BufferedReader bufferedReader = Files.newBufferedReader(filePath);
+  public void createIndex(boolean isCompressed) throws IOException {
+    BufferedReader bufferedReader = Files.newBufferedReader(file.toPath());
     SortedMap<String, ArrayList<Integer>> empIdBitVectors = new TreeMap<>();
     SortedMap<String, ArrayList<Integer>> dateBitVectors = new TreeMap<>();
     SortedMap<String, ArrayList<Integer>> genderBitVectors = new TreeMap<>();
     String line;
     int i = 0;
     while ((line = bufferedReader.readLine()) != null) {
-      String compressedBitMap = encodeRunLength(i);
       String empId = line.substring(0, 8);
       String date = line.substring(8, 18);
       String gender = line.substring(43, 44);
@@ -43,19 +45,25 @@ public class BitMapIndex {
       i++;
     }
     bufferedReader.close();
-    generateIndex(empIdIndexPath, empIdBitVectors);
-    generateIndex(dateIndexPath, dateBitVectors);
-    generateIndex(genderIndexPath, genderBitVectors);
+    generateIndex("empId", empIdBitVectors, isCompressed);
+    generateIndex("date", dateBitVectors, isCompressed);
+    generateIndex("gender", genderBitVectors, isCompressed);
 
   }
 
-  private void generateIndex(Path indexPath,
-      SortedMap<String, ArrayList<Integer>> bitVectors) throws IOException {
+  private void generateIndex(String indexField,
+      SortedMap<String, ArrayList<Integer>> bitVectors, boolean isCompressed) throws IOException {
+    String fileName = file.toPath().getFileName().toString();
+    Path indexPath = Paths.get(
+        String.format("data/output/index/%s-index-%s-%s", indexField, isCompressed ? "compressed"
+            : "uncompressed", fileName));
+
     BufferedWriter bufferedWriter = Files.newBufferedWriter(indexPath);
     for (Entry<String, ArrayList<Integer>> entry : bitVectors.entrySet()) {
+      String encodedLine = compressRuns(entry.getValue());
       StringBuilder stringBuilder = new StringBuilder();
       stringBuilder.append(entry.getKey());
-      stringBuilder.append(compressRunLength(entry.getValue()));
+      stringBuilder.append(isCompressed ? encodedLine : decompressRuns(encodedLine));
       stringBuilder.append("\n");
       bufferedWriter.append(stringBuilder.toString());
     }
@@ -66,21 +74,24 @@ public class BitMapIndex {
       String field) {
     if (bitVectors.containsKey(field)) {
       ArrayList<Integer> currentList = bitVectors.get(field);
-      int lastRun = currentList.get(currentList.size() - 1);
-      currentList.add(i - lastRun);
+      // get the lastIndex of the current bitVector
+      int lastIndex = currentList.stream().reduce(0, (a, b) -> a + b + 1);
+      // get the run length
+      currentList.add(i - lastIndex);
     } else {
       ArrayList<Integer> runs = new ArrayList<>();
       runs.add(i);
+      // initial run
       bitVectors.put(field, runs);
     }
   }
 
-  private String compressRunLength(ArrayList<Integer> runs) {
+  private String compressRuns(ArrayList<Integer> runs) {
     // concatenate runs to a single string
     return runs.stream().map(this::encodeRunLength).collect(Collectors.joining(""));
   }
 
-  private String decompressRunLength(String encodedLine) {
+  private String decompressRuns(String encodedLine) {
     ArrayList<Integer> runs = decodeRunLength(encodedLine);
     StringBuilder stringBuilder = new StringBuilder();
     for (int run : runs) {
@@ -90,6 +101,10 @@ public class BitMapIndex {
       }
       // set the final bit to 1
       stringBuilder.append("1");
+    }
+    // trailing zeros if any
+    while (stringBuilder.length() < numberOfRecords) {
+      stringBuilder.append("0");
     }
     return stringBuilder.toString();
   }
