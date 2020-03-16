@@ -6,10 +6,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Map.Entry;
 import java.util.SortedMap;
-import java.util.StringJoiner;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 
@@ -36,9 +34,9 @@ public class BitMapIndex {
     String line;
     int i = 0;
     while ((line = bufferedReader.readLine()) != null) {
-      String empId = line.substring(0, 8);
-      String date = line.substring(8, 18);
-      String gender = line.substring(43, 44);
+      String empId = FieldEnum.EMP_ID.getValue(line);
+      String date = FieldEnum.DATE.getValue(line);
+      String gender = FieldEnum.GENDER.getValue(line);
       addRecordToIndex(empIdBitVectors, i, empId);
       addRecordToIndex(dateBitVectors, i, date);
       addRecordToIndex(genderBitVectors, i, gender);
