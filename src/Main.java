@@ -10,6 +10,7 @@ public class Main {
         Instant start = Instant.now();
         BitMapIndex bitMapIndex = new BitMapIndex(args[0]);
         bitMapIndex.createIndex(true);
+        bitMapIndex.mergePartialIndexes("data/output/index/empId");
         Instant finish = Instant.now();
         long timeElapsed = Duration.between(start, finish).toMillis();
         System.out.printf("Indexes created in %f seconds\n",timeElapsed/1000.0);

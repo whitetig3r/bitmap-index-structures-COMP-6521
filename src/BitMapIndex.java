@@ -1,18 +1,22 @@
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileReader;
 import java.io.IOException;
+import java.lang.reflect.Array;
+import java.nio.Buffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Map.Entry;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
+import javax.print.DocFlavor.STRING;
 
 public class BitMapIndex {
-
   public final int RECORD_SIZE = 101;
   private File file;
   private int numberOfRecords;
@@ -88,6 +92,33 @@ public class BitMapIndex {
     }
     bitVectors.clear();
     bufferedWriter.close();
+  }
+
+  public void mergePartialIndexes(String path) throws IOException {
+    List<BufferedReader> readerList = new ArrayList<>();
+    Path directory = Paths.get(path);
+
+    // For each file, get a buffered reader
+    Files.walk(directory)
+        .filter(Files::isRegularFile)
+        .forEach(f -> {
+          try {
+            readerList.add(Files.newBufferedReader(f));
+          } catch (IOException e) {
+            e.printStackTrace();
+          }
+        });
+
+    // Key = empId, Value = runs as the array list
+    TreeMap<String, ArrayList<Integer>> treeMap = new TreeMap<>();
+    for(BufferedReader reader : readerList) {
+      String line;
+      int lineCount = 0;
+      while ((line = reader.readLine()) != null || lineCount != 40) {
+        treeMap.put(line.substring(0, 8), decodeRunLength(line.substring(8)));
+        lineCount++;
+      }
+    }
   }
 
   private void addRecordToIndex(SortedMap<String, ArrayList<Integer>> bitVectors, int i,
