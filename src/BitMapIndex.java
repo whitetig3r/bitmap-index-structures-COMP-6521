@@ -19,14 +19,14 @@ public class BitMapIndex {
 
   public BitMapIndex(String fileLocation) throws IOException {
     file = new File(fileLocation);
-    numberOfRecords = (int) (file.length() / RECORD_SIZE);
+    numberOfRecords = (int) Math.ceil(file.length() /(float) RECORD_SIZE);
     for(FieldEnum fieldEnum: FieldEnum.values()){
       cleanUp(fieldEnum.getName());
     }
   }
-
   private void cleanUp(String path) throws IOException {
     Files.walk(Paths.get(String.format("data/output/index/%s",path)))
+
         .filter(Files::isRegularFile)
         .map(Path::toFile)
         .forEach(File::delete);
@@ -43,12 +43,11 @@ public class BitMapIndex {
     SortedMap<String, ArrayList<Integer>> genderBitVectors = new TreeMap<>();
     String line;
     int i = 0;
-    int tuplesInABuffer = 10;
-    int tuplesInLastChunk = numberOfRecords%10;
+    int tuplesInABuffer = 10000;
+    int tuplesInLastChunk = numberOfRecords%tuplesInABuffer;
     int readCount=0;
     int writeCount=0;
     while ((line = bufferedReader.readLine()) != null) {
-      int run = (int) Math.ceil(i/10.0);
       String empId = FieldEnum.EMP_ID.getValue(line);
       String date = FieldEnum.DATE.getValue(line);
       String gender = FieldEnum.GENDER.getValue(line);
@@ -56,7 +55,8 @@ public class BitMapIndex {
       addRecordToIndex(dateBitVectors, i, date);
       addRecordToIndex(genderBitVectors, i, gender);
       i++;
-      if (i % 10 == 0 || i == numberOfRecords) {
+      if (i % tuplesInABuffer == 0 || i == numberOfRecords) {
+        int run = (int) Math.ceil(i/(float) tuplesInABuffer);
         readCount+=1;
         generateIndex(FieldEnum.EMP_ID.getName(), empIdBitVectors, isCompressed,run);
         generateIndex(FieldEnum.DATE.getName(), dateBitVectors, isCompressed,run);

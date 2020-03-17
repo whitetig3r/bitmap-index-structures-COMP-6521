@@ -9,7 +9,7 @@ public class Main {
         System.out.println("Creating indexes for empId, date, gender");
         Instant start = Instant.now();
         BitMapIndex bitMapIndex = new BitMapIndex(args[0]);
-        bitMapIndex.createIndex(false);
+        bitMapIndex.createIndex(true);
         Instant finish = Instant.now();
         long timeElapsed = Duration.between(start, finish).toMillis();
         System.out.printf("Indexes created in %f seconds\n",timeElapsed/1000.0);

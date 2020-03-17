@@ -1,5 +1,5 @@
 public enum FieldEnum {
-  EMP_ID(0, 18,"empId"),
+  EMP_ID(0, 8,"empId"),
   DATE(8, 18,"date"),
   GENDER(43, 44,"gender");
   String name;
