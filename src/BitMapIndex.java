@@ -1,10 +1,7 @@
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileReader;
 import java.io.IOException;
-import java.lang.reflect.Array;
-import java.nio.Buffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -14,22 +11,49 @@ import java.util.Map.Entry;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
-import javax.print.DocFlavor.STRING;
 
 public class BitMapIndex {
+
   public final int RECORD_SIZE = 101;
+  int tuplesInABuffer;
   private File file;
   private int numberOfRecords;
 
-  public BitMapIndex(String fileLocation) throws IOException {
+  public BitMapIndex(String fileLocation, int tuplesInABuffer, boolean doCleanUp)
+      throws IOException {
     file = new File(fileLocation);
-    numberOfRecords = (int) Math.ceil(file.length() /(float) RECORD_SIZE);
-    for(FieldEnum fieldEnum: FieldEnum.values()){
-      cleanUp(fieldEnum.getName());
+    this.tuplesInABuffer = tuplesInABuffer;
+    numberOfRecords = (int) Math.ceil(file.length() / (float) RECORD_SIZE);
+    if (doCleanUp) {
+      for (FieldEnum fieldEnum : FieldEnum.values()) {
+        cleanUp(fieldEnum.getName());
+      }
     }
   }
+
+  public static ArrayList<Integer> decodeRunLength(String encodedLine) {
+    int runLength = 0;
+    ArrayList<Integer> runs = new ArrayList<>();
+    for (int i = 0; i < encodedLine.length(); i++) {
+      // count all 1's
+      if (encodedLine.charAt(i) != '0') {
+        runLength++;
+        continue;
+      }
+      // count the last 0 followed by 1's
+      runLength++;
+      // get the run
+      String run = encodedLine.substring(i + 1, (i + 1) + runLength);
+      runs.add(Integer.valueOf(run, 2));
+      // move to the next run
+      i += runLength;
+      runLength = 0;
+    }
+    return runs;
+  }
+
   private void cleanUp(String path) throws IOException {
-    Files.walk(Paths.get(String.format("data/output/index/%s",path)))
+    Files.walk(Paths.get(String.format("data/output/index/%s", path)))
 
         .filter(Files::isRegularFile)
         .map(Path::toFile)
@@ -47,10 +71,9 @@ public class BitMapIndex {
     SortedMap<String, ArrayList<Integer>> genderBitVectors = new TreeMap<>();
     String line;
     int i = 0;
-    int tuplesInABuffer = 10000;
-    int tuplesInLastChunk = numberOfRecords%tuplesInABuffer;
-    int readCount=0;
-    int writeCount=0;
+    int tuplesInLastChunk = numberOfRecords % tuplesInABuffer;
+    int readCount = 0;
+    int writeCount = 0;
     while ((line = bufferedReader.readLine()) != null) {
       String empId = FieldEnum.EMP_ID.getValue(line);
       String date = FieldEnum.DATE.getValue(line);
@@ -60,42 +83,53 @@ public class BitMapIndex {
       addRecordToIndex(genderBitVectors, i, gender);
       i++;
       if (i % tuplesInABuffer == 0 || i == numberOfRecords) {
-        int run = (int) Math.ceil(i/(float) tuplesInABuffer);
-        readCount+=1;
-        generateIndex(FieldEnum.EMP_ID.getName(), empIdBitVectors, isCompressed,run);
-        generateIndex(FieldEnum.DATE.getName(), dateBitVectors, isCompressed,run);
-        generateIndex(FieldEnum.GENDER.getName(), genderBitVectors, isCompressed,run);
-        writeCount+=3;
+        int run = (int) Math.ceil(i / (float) tuplesInABuffer);
+        readCount += 1;
+        generateIndex(FieldEnum.EMP_ID.getName(), empIdBitVectors, isCompressed, run);
+        generateIndex(FieldEnum.DATE.getName(), dateBitVectors, isCompressed, run);
+        generateIndex(FieldEnum.GENDER.getName(), genderBitVectors, isCompressed, run);
+        writeCount += 3;
       }
     }
-    System.out.printf("Reads:%d, Writes:%d\n", readCount,writeCount);
+    System.out.printf("Reads:%d, Writes:%d\n", readCount, writeCount);
     bufferedReader.close();
 
 
   }
 
   private void generateIndex(String indexField,
-      SortedMap<String, ArrayList<Integer>> bitVectors, boolean isCompressed, int run) throws IOException {
+      SortedMap<String, ArrayList<Integer>> bitVectors, boolean isCompressed, int run)
+      throws IOException {
     String fileName = file.toPath().getFileName().toString();
     Path indexPath = Paths.get(
-        String.format("data/output/index/%s/%s-index-%d-%s-%s",indexField, indexField,run, isCompressed ? "compressed"
-            : "uncompressed", fileName));
+        String.format("data/output/index/%s/%s-index-%d-%s-%s", indexField, indexField, run,
+            isCompressed ? "compressed"
+                : "uncompressed", fileName));
 
     BufferedWriter bufferedWriter = Files.newBufferedWriter(indexPath);
     for (Entry<String, ArrayList<Integer>> entry : bitVectors.entrySet()) {
-      String encodedLine = compressRuns(entry.getValue());
-      StringBuilder stringBuilder = new StringBuilder();
-      stringBuilder.append(entry.getKey());
-      stringBuilder.append(isCompressed ? encodedLine : decompressRuns(encodedLine));
-      stringBuilder.append("\n");
-      bufferedWriter.append(stringBuilder.toString());
+      bufferedWriter.append(entry.getKey());
+      for (Integer runLength : entry.getValue()) {
+        String encodedRun = encodeRunLength(runLength);
+        bufferedWriter.append(isCompressed ? encodedRun : decompressRuns(encodedRun));
+      }
+      bufferedWriter.append("\n");
     }
     bitVectors.clear();
     bufferedWriter.close();
   }
 
-  public void mergePartialIndexes(String path) throws IOException {
-    List<BufferedReader> readerList = new ArrayList<>();
+  public void mergePartialIndexes(String path, String fieldName, boolean isCompressed)
+      throws IOException {
+    String fileName = file.toPath().getFileName().toString();
+    Path mergedIndexPath = Paths.get(
+        String.format("data/output/merged/%s-index-%s-%s", fieldName,
+            isCompressed ? "compressed"
+                : "uncompressed", fileName));
+
+    BufferedWriter bufferedWriter = Files.newBufferedWriter(mergedIndexPath);
+
+    List<PartialIndexReader> readerList = new ArrayList<>();
     Path directory = Paths.get(path);
 
     // For each file, get a buffered reader
@@ -103,7 +137,7 @@ public class BitMapIndex {
         .filter(Files::isRegularFile)
         .forEach(f -> {
           try {
-            readerList.add(Files.newBufferedReader(f));
+            readerList.add(new PartialIndexReader(f.toString(), tuplesInABuffer, 8));
           } catch (IOException e) {
             e.printStackTrace();
           }
@@ -111,13 +145,63 @@ public class BitMapIndex {
 
     // Key = empId, Value = runs as the array list
     TreeMap<String, ArrayList<Integer>> treeMap = new TreeMap<>();
-    for(BufferedReader reader : readerList) {
-      String line;
-      int lineCount = 0;
-      while ((line = reader.readLine()) != null || lineCount != 40) {
-        treeMap.put(line.substring(0, 8), decodeRunLength(line.substring(8)));
-        lineCount++;
+    String[] keysOfPartialIndexes = new String[readerList.size()];
+    initialFill(readerList, keysOfPartialIndexes, treeMap);
+    Entry<String, ArrayList<Integer>> minIndex;
+    while ((minIndex = getMinOfAllPartialIndexes(readerList,keysOfPartialIndexes, treeMap)) != null) {
+      bufferedWriter.append(minIndex.getKey());
+      for (Integer run : minIndex.getValue()) {
+        bufferedWriter.append(encodeRunLength(run));
       }
+      bufferedWriter.append("\n");
+    }
+    bufferedWriter.close();
+  }
+
+  private Entry<String, ArrayList<Integer>> getMinOfAllPartialIndexes(
+      List<PartialIndexReader> readerList,
+      String[] keysOfPartialIndexes,
+      TreeMap<String, ArrayList<Integer>> treeMap) throws IOException {
+    Entry<String, ArrayList<Integer>> minIndex = treeMap.pollFirstEntry();
+    for (int i = 0; i < keysOfPartialIndexes.length; i++) {
+      String key = keysOfPartialIndexes[i];
+      if(key == null){
+        continue;
+      }
+      if (key.equals(minIndex.getKey())) {
+        insertIndexFromReader(keysOfPartialIndexes, treeMap, i, readerList.get(i));
+      }
+    }
+    return minIndex;
+  }
+
+  private void initialFill(List<PartialIndexReader> readerList, String[] keysOfPartialIndexes,
+      TreeMap<String, ArrayList<Integer>> treeMap) throws IOException {
+    for (int i = 0; i < readerList.size(); i++) {
+      PartialIndexReader reader = readerList.get(i);
+      insertIndexFromReader(keysOfPartialIndexes, treeMap, i, reader);
+    }
+  }
+
+  private void insertIndexFromReader(String[] keysOfPartialIndexes,
+      TreeMap<String, ArrayList<Integer>> treeMap, int i, PartialIndexReader reader)
+      throws IOException {
+    Entry<String, ArrayList<Integer>> compressedIndex = reader.getNextIndex();
+    if (compressedIndex == null) {
+      keysOfPartialIndexes[i] = null;
+      return;
+    }
+    String key = compressedIndex.getKey();
+    keysOfPartialIndexes[i] = key;
+    ArrayList<Integer> newList = compressedIndex.getValue();
+    if (treeMap.containsKey(key)) {
+      ArrayList<Integer> currentList = treeMap.get(key);
+      int lastIndex = currentList.stream().reduce(0, (a, b) -> a + b + 1);
+      int indexOfnewRun = i * tuplesInABuffer + newList.get(0);
+      newList.set(0, indexOfnewRun - lastIndex);
+      currentList.addAll(newList);
+    } else {
+      treeMap.put(key, newList);
     }
   }
 
@@ -172,26 +256,5 @@ public class BitMapIndex {
     // append the actual run length
     sb.append(Integer.toBinaryString(i));
     return sb.toString();
-  }
-
-  private ArrayList<Integer> decodeRunLength(String encodedLine) {
-    int runLength = 0;
-    ArrayList<Integer> runs = new ArrayList<>();
-    for (int i = 0; i < encodedLine.length(); i++) {
-      // count all 1's
-      if (encodedLine.charAt(i) != '0') {
-        runLength++;
-        continue;
-      }
-      // count the last 0 followed by 1's
-      runLength++;
-      // get the run
-      String run = encodedLine.substring(i + 1, (i + 1) + runLength);
-      runs.add(Integer.valueOf(run, 2));
-      // move to the next run
-      i += runLength;
-      runLength = 0;
-    }
-    return runs;
   }
 }
