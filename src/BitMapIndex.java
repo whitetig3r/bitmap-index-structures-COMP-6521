@@ -110,8 +110,8 @@ public class BitMapIndex {
     for (Entry<String, ArrayList<Integer>> entry : bitVectors.entrySet()) {
       bufferedWriter.append(entry.getKey());
       for (Integer runLength : entry.getValue()) {
-        String encodedRun = encodeRunLength(runLength);
-        bufferedWriter.append(isCompressed ? encodedRun : decompressRuns(encodedRun));
+        String encodedRun = isCompressed?encodeRunLength(runLength):encodeRunLengthCompressed(runLength);
+        bufferedWriter.append(encodedRun);
       }
       bufferedWriter.append("\n");
     }
@@ -119,25 +119,25 @@ public class BitMapIndex {
     bufferedWriter.close();
   }
 
-  public void mergePartialIndexes(String path, String fieldName, boolean isCompressed)
+  public void mergePartialIndexes(FieldEnum fieldEnum, boolean isCompressed)
       throws IOException {
     String fileName = file.toPath().getFileName().toString();
     Path mergedIndexPath = Paths.get(
-        String.format("data/output/merged/%s-index-%s-%s", fieldName,
+        String.format("data/output/merged/%s-index-%s-%s", fieldEnum.getName(),
             isCompressed ? "compressed"
                 : "uncompressed", fileName));
 
     BufferedWriter bufferedWriter = Files.newBufferedWriter(mergedIndexPath);
 
     List<PartialIndexReader> readerList = new ArrayList<>();
-    Path directory = Paths.get(path);
+    Path directory = Paths.get("data/output/index/"+fieldEnum.getName());
 
     // For each file, get a buffered reader
     Files.walk(directory)
         .filter(Files::isRegularFile)
         .forEach(f -> {
           try {
-            readerList.add(new PartialIndexReader(f.toString(), tuplesInABuffer, 8));
+            readerList.add(new PartialIndexReader(f.toString(), tuplesInABuffer, fieldEnum.getFieldLength()));
           } catch (IOException e) {
             e.printStackTrace();
           }
@@ -197,8 +197,8 @@ public class BitMapIndex {
     if (treeMap.containsKey(key)) {
       ArrayList<Integer> currentList = treeMap.get(key);
       int lastIndex = currentList.stream().reduce(0, (a, b) -> a + b + 1);
-      int indexOfnewRun = i * tuplesInABuffer + newList.get(0);
-      newList.set(0, indexOfnewRun - lastIndex);
+      int indexOfNewRun = i * tuplesInABuffer + newList.get(0);
+      newList.set(0, indexOfNewRun - lastIndex);
       currentList.addAll(newList);
     } else {
       treeMap.put(key, newList);
@@ -256,5 +256,15 @@ public class BitMapIndex {
     // append the actual run length
     sb.append(Integer.toBinaryString(i));
     return sb.toString();
+  }
+  private String encodeRunLengthCompressed(int run) {
+    StringBuilder stringBuilder = new StringBuilder();
+    // set run bits to 0
+    for (int i = 0; i < run; i++) {
+      stringBuilder.append("0");
+    }
+    // set the final bit to 1
+    stringBuilder.append("1");
+    return stringBuilder.toString();
   }
 }
