@@ -8,7 +8,7 @@ public class Main {
     // write your code here
     System.out.println("Creating indexes for empId, date, gender");
     Instant executionStart = Instant.now();
-    BitMapIndex bitMapIndex = new BitMapIndex(args[0], 10000, false);
+    BitMapIndex bitMapIndex = new BitMapIndex(args[0], 10000, true);
     bitMapIndex.createIndex(true);
     Instant partialIndexFinish = Instant.now();
     long timeElapsedPartialIndex = Duration.between(executionStart, partialIndexFinish).toMillis();

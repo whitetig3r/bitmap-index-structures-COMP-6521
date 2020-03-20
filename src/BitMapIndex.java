@@ -6,8 +6,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map.Entry;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
@@ -110,7 +113,8 @@ public class BitMapIndex {
     for (Entry<String, ArrayList<Integer>> entry : bitVectors.entrySet()) {
       bufferedWriter.append(entry.getKey());
       for (Integer runLength : entry.getValue()) {
-        String encodedRun = isCompressed?encodeRunLength(runLength):encodeRunLengthCompressed(runLength);
+        String encodedRun =
+            isCompressed ? encodeRunLength(runLength) : encodeRunLengthCompressed(runLength);
         bufferedWriter.append(encodedRun);
       }
       bufferedWriter.append("\n");
@@ -130,14 +134,15 @@ public class BitMapIndex {
     BufferedWriter bufferedWriter = Files.newBufferedWriter(mergedIndexPath);
 
     List<PartialIndexReader> readerList = new ArrayList<>();
-    Path directory = Paths.get("data/output/index/"+fieldEnum.getName());
+    Path directory = Paths.get("data/output/index/" + fieldEnum.getName());
 
     // For each file, get a buffered reader
     Files.walk(directory)
         .filter(Files::isRegularFile)
         .forEach(f -> {
           try {
-            readerList.add(new PartialIndexReader(f.toString(), tuplesInABuffer, fieldEnum.getFieldLength()));
+            readerList.add(
+                new PartialIndexReader(f.toString(), tuplesInABuffer, fieldEnum.getFieldLength()));
           } catch (IOException e) {
             e.printStackTrace();
           }
@@ -146,63 +151,56 @@ public class BitMapIndex {
     // Key = empId, Value = runs as the array list
     TreeMap<String, ArrayList<Integer>> treeMap = new TreeMap<>();
     String[] keysOfPartialIndexes = new String[readerList.size()];
-    initialFill(readerList, keysOfPartialIndexes, treeMap);
-    Entry<String, ArrayList<Integer>> minIndex;
-    while ((minIndex = getMinOfAllPartialIndexes(readerList,keysOfPartialIndexes, treeMap)) != null) {
-      bufferedWriter.append(minIndex.getKey());
-      for (Integer run : minIndex.getValue()) {
-        bufferedWriter.append(encodeRunLength(run));
+    initialFill(readerList, keysOfPartialIndexes);
+    String minIndex;
+    while ((minIndex = getMinOfAllPartialIndexes(keysOfPartialIndexes))
+        != null) {
+      bufferedWriter.append(minIndex);
+      int lastIndex = 0;
+      for (int i = 0; i < readerList.size(); i++) {
+        PartialIndexReader reader = readerList.get(i);
+        Entry<String, ArrayList<Integer>> currentIndex = reader.getCurrentIndex();
+        if (currentIndex != null && currentIndex.getKey().equals(minIndex)) {
+          ArrayList<Integer> currentRuns = currentIndex.getValue();
+          int firstIndex = i * tuplesInABuffer + currentRuns.get(0);
+          currentRuns.set(0, firstIndex - lastIndex);
+          lastIndex = currentRuns.stream().reduce(0, (a, b) -> a + b + 1);
+          for (Integer run : currentRuns) {
+            bufferedWriter.append(encodeRunLength(run));
+          }
+          insertIndexFromReader(keysOfPartialIndexes, i, reader);
+        }
       }
       bufferedWriter.append("\n");
     }
     bufferedWriter.close();
   }
 
-  private Entry<String, ArrayList<Integer>> getMinOfAllPartialIndexes(
-      List<PartialIndexReader> readerList,
-      String[] keysOfPartialIndexes,
-      TreeMap<String, ArrayList<Integer>> treeMap) throws IOException {
-    Entry<String, ArrayList<Integer>> minIndex = treeMap.pollFirstEntry();
-    for (int i = 0; i < keysOfPartialIndexes.length; i++) {
-      String key = keysOfPartialIndexes[i];
-      if(key == null){
-        continue;
-      }
-      if (key.equals(minIndex.getKey())) {
-        insertIndexFromReader(keysOfPartialIndexes, treeMap, i, readerList.get(i));
-      }
-    }
-    return minIndex;
+  private String getMinOfAllPartialIndexes(
+      String[] keysOfPartialIndexes) {
+    Optional<String> minKey = Arrays.stream(keysOfPartialIndexes).filter(Objects::nonNull)
+        .min(String::compareTo);
+    return minKey.orElse(null);
   }
 
-  private void initialFill(List<PartialIndexReader> readerList, String[] keysOfPartialIndexes,
-      TreeMap<String, ArrayList<Integer>> treeMap) throws IOException {
-    for (int i = 0; i < readerList.size(); i++) {
-      PartialIndexReader reader = readerList.get(i);
-      insertIndexFromReader(keysOfPartialIndexes, treeMap, i, reader);
+  private void initialFill(List<PartialIndexReader> readerList, String[] keysOfPartialIndexes)
+      throws IOException {
+    for (int readerIndex = 0; readerIndex < readerList.size(); readerIndex++) {
+      PartialIndexReader reader = readerList.get(readerIndex);
+      insertIndexFromReader(keysOfPartialIndexes, readerIndex, reader);
     }
   }
 
   private void insertIndexFromReader(String[] keysOfPartialIndexes,
-      TreeMap<String, ArrayList<Integer>> treeMap, int i, PartialIndexReader reader)
+      int readerIndex, PartialIndexReader reader)
       throws IOException {
     Entry<String, ArrayList<Integer>> compressedIndex = reader.getNextIndex();
     if (compressedIndex == null) {
-      keysOfPartialIndexes[i] = null;
+      keysOfPartialIndexes[readerIndex] = null;
       return;
     }
     String key = compressedIndex.getKey();
-    keysOfPartialIndexes[i] = key;
-    ArrayList<Integer> newList = compressedIndex.getValue();
-    if (treeMap.containsKey(key)) {
-      ArrayList<Integer> currentList = treeMap.get(key);
-      int lastIndex = currentList.stream().reduce(0, (a, b) -> a + b + 1);
-      int indexOfNewRun = i * tuplesInABuffer + newList.get(0);
-      newList.set(0, indexOfNewRun - lastIndex);
-      currentList.addAll(newList);
-    } else {
-      treeMap.put(key, newList);
-    }
+    keysOfPartialIndexes[readerIndex] = key;
   }
 
   private void addRecordToIndex(SortedMap<String, ArrayList<Integer>> bitVectors, int i,
@@ -215,7 +213,7 @@ public class BitMapIndex {
       currentList.add(i - lastIndex);
     } else {
       ArrayList<Integer> runs = new ArrayList<>();
-      runs.add(i);
+      runs.add(i % 10);
       // initial run
       bitVectors.put(field, runs);
     }
@@ -257,6 +255,7 @@ public class BitMapIndex {
     sb.append(Integer.toBinaryString(i));
     return sb.toString();
   }
+
   private String encodeRunLengthCompressed(int run) {
     StringBuilder stringBuilder = new StringBuilder();
     // set run bits to 0

@@ -10,7 +10,7 @@ import java.util.TreeMap;
 public class PartialIndexReader {
 
   BufferedReader bufferedReader;
-  TreeMap<String, ArrayList<Integer>> indexes;
+  Entry<String, ArrayList<Integer>> index;
   private int tuplesInABuffer;
   private int fieldLength;
 
@@ -18,14 +18,14 @@ public class PartialIndexReader {
     bufferedReader = Files.newBufferedReader(Paths.get(path));
     this.tuplesInABuffer = tuplesInABuffer;
     this.fieldLength = fieldLength;
-    this.indexes = new TreeMap<>();
   }
 
   public Entry<String, ArrayList<Integer>> getNextIndex() throws IOException {
     char[] key = new char[fieldLength];
     bufferedReader.read(key);
     if(String.valueOf(key).trim().isEmpty()){
-      return null;
+      index = null;
+      return index;
     }
     int c;
     int runLength = 0;
@@ -50,6 +50,11 @@ public class PartialIndexReader {
       runs.add(Integer.valueOf(String.valueOf(run), 2));
       runLength = 0;
     }
-    return new SimpleEntry<>(String.valueOf(key), runs);
+    index = new SimpleEntry<>(String.valueOf(key), runs);
+    return index;
+  }
+
+  public Entry<String, ArrayList<Integer>> getCurrentIndex() {
+    return index;
   }
 }
