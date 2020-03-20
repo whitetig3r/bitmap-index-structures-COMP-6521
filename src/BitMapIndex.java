@@ -55,9 +55,9 @@ public class BitMapIndex {
 
   private void cleanUp(String path) throws IOException {
     Files.walk(Paths.get(String.format("data/output/index/%s", path)))
-
         .filter(Files::isRegularFile)
         .map(Path::toFile)
+        .sorted()
         .forEach(File::delete);
   }
 
@@ -103,7 +103,7 @@ public class BitMapIndex {
       throws IOException {
     String fileName = file.toPath().getFileName().toString();
     Path indexPath = Paths.get(
-        String.format("data/output/index/%s/%s-index-%d-%s-%s", indexField, indexField, run,
+        String.format("data/output/index/%s/%s-index-%03d-%s-%s", indexField, indexField, run,
             isCompressed ? "compressed"
                 : "uncompressed", fileName));
 
@@ -164,7 +164,7 @@ public class BitMapIndex {
           ArrayList<Integer> currentRuns = currentIndex.getValue();
           int firstIndex = i * tuplesInABuffer + currentRuns.get(0);
           currentRuns.set(0, firstIndex - lastIndex);
-          lastIndex = currentRuns.stream().reduce(0, (a, b) -> a + b + 1);
+          lastIndex += currentRuns.stream().reduce(0, (a, b) -> a + b + 1);
           for (Integer run : currentRuns) {
             bufferedWriter.append(encodeRunLength(run));
           }
@@ -196,7 +196,7 @@ public class BitMapIndex {
       currentList.add(i - lastIndex);
     } else {
       ArrayList<Integer> runs = new ArrayList<>();
-      runs.add(i % 10);
+      runs.add(i % tuplesInABuffer);
       // initial run
       bitVectors.put(field, runs);
     }
