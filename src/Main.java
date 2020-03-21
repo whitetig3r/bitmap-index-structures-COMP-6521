@@ -5,10 +5,9 @@ import java.time.Instant;
 public class Main {
 
   public static void main(String[] args) throws IOException {
-    // write your code here
     System.out.println("Creating indexes for empId, date, gender");
     Instant executionStart = Instant.now();
-    BitMapIndex bitMapIndex = new BitMapIndex(args[0], 10000, true);
+    BitMapIndex bitMapIndex = new BitMapIndex(args[0], 10, true);
     bitMapIndex.createIndex(true);
     Instant partialIndexFinish = Instant.now();
     long timeElapsedPartialIndex = Duration.between(executionStart, partialIndexFinish).toMillis();
@@ -26,8 +25,10 @@ public class Main {
     System.out.println("Uncompressing indexes");
     bitMapIndex.unCompressRuns(FieldEnum.EMP_ID);
     bitMapIndex.unCompressRuns(FieldEnum.DATE);
-bitMapIndex.unCompressRuns(FieldEnum.GENDER);
+    bitMapIndex.unCompressRuns(FieldEnum.GENDER);
     Instant executionFinish = Instant.now();
+
+    bitMapIndex.eliminateDuplicates();
 
     long timeElapsed = Duration.between(executionStart, executionFinish).toMillis();
     System.out.printf("total time to create Indexes - %f seconds\n", timeElapsed / 1000.0);

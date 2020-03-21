@@ -1,18 +1,24 @@
 import java.io.BufferedReader;
+import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Map.Entry;
+import java.util.Random;
 import java.util.TreeMap;
 
 public class PartialIndexReader {
 
   BufferedReader bufferedReader;
+  RandomAccessFile raf;
   Entry<String, ArrayList<Integer>> index;
   private int fieldLength;
   String path;
+  int counter = 1;
 
   public PartialIndexReader(String path, int fieldLength) throws IOException {
     bufferedReader = Files.newBufferedReader(Paths.get(path));

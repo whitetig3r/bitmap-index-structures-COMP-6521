@@ -5,12 +5,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.Objects;
-import java.util.SortedMap;
-import java.util.TreeMap;
 
 public class BitMapIndex {
 
@@ -89,6 +85,7 @@ public class BitMapIndex {
         generateIndex(FieldEnum.EMP_ID.getName(), empIdBitVectors, isCompressed, run);
         generateIndex(FieldEnum.DATE.getName(), dateBitVectors, isCompressed, run);
         generateIndex(FieldEnum.GENDER.getName(), genderBitVectors, isCompressed, run);
+        // TODO check if this disk IO count is correct
         writeCount += 3;
       }
     }
@@ -273,5 +270,53 @@ public class BitMapIndex {
     }
     // set the final bit to 1
     bufferedWriter.append('1');
+  }
+
+  public void eliminateDuplicates() throws IOException {
+
+    String empFileName = file.toPath().getFileName().toString();
+    Path empPath = Paths.get(
+            String.format("data/output/merged/uncompressed/%s-index-%s-%s", FieldEnum.EMP_ID.getName(),
+                    "uncompressed", empFileName));
+    IndexReader empReader = new IndexReader(empPath.toString(), numberOfRecords, FieldEnum.EMP_ID.getFieldLength());
+
+    String dateFileName = file.toPath().getFileName().toString();
+    Path datePath = Paths.get(
+            String.format("data/output/merged/uncompressed/%s-index-%s-%s", FieldEnum.DATE.getName(),
+                    "uncompressed", dateFileName));
+
+    Entry<String, Integer> latestRecord;
+    BufferedWriter writer = Files.newBufferedWriter(Paths.get("data/output/merged/final/empId-final.txt"));
+    while((latestRecord = getLatestDate(empReader, datePath)) != null) {
+      writer.append(latestRecord.getKey());
+      writer.append(", ");
+      writer.append(String.valueOf(latestRecord.getValue()));
+      writer.append("\n");
+    }
+    writer.close();
+  }
+
+  private Entry<String, Integer> getLatestDate(IndexReader empReader, Path datePath) throws IOException {
+    Entry<String, ArrayList<Integer>> currentId;
+    while((currentId = empReader.getNextIndex()) != null) {
+      if (currentId.getValue().size() > 1) {
+        IndexReader dateReader = new IndexReader(datePath.toString(), numberOfRecords, FieldEnum.DATE.getFieldLength());
+        while(true) {
+          Entry<String, ArrayList<Integer>> currentDate = dateReader.getNextIndexReversed();
+          for(Integer index : currentDate.getValue()) {
+            if(currentId.getValue().contains(index)) {
+              int latestIndex = currentId.getValue().indexOf(index);
+              Integer latestDate = currentId.getValue().get(latestIndex);
+              return new AbstractMap.SimpleEntry<>(currentId.getKey(), latestDate);
+            }
+          }
+        }
+      }
+      else {
+        Integer latestDate = currentId.getValue().get(0);
+        return new AbstractMap.SimpleEntry<>(currentId.getKey(), latestDate);
+      }
+    }
+    return null;
   }
 }
