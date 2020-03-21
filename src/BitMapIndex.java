@@ -11,7 +11,6 @@ import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.SortedMap;
 import java.util.TreeMap;
-import java.util.stream.Collectors;
 
 public class BitMapIndex {
 
@@ -27,8 +26,10 @@ public class BitMapIndex {
     numberOfRecords = (int) Math.ceil(file.length() / (float) RECORD_SIZE);
     if (doCleanUp) {
       for (FieldEnum fieldEnum : FieldEnum.values()) {
-        cleanUp(fieldEnum.getName());
+        cleanUp(String.format("data/output/index/%s", fieldEnum.getName()));
       }
+      cleanUp("data/output/merged/compressed");
+      cleanUp("data/output/merged/uncompressed");
     }
   }
 
@@ -54,10 +55,9 @@ public class BitMapIndex {
   }
 
   private void cleanUp(String path) throws IOException {
-    Files.walk(Paths.get(String.format("data/output/index/%s", path)))
+    Files.walk(Paths.get(path))
         .filter(Files::isRegularFile)
         .map(Path::toFile)
-        .sorted()
         .forEach(File::delete);
   }
 
@@ -111,9 +111,11 @@ public class BitMapIndex {
     for (Entry<String, ArrayList<Integer>> entry : bitVectors.entrySet()) {
       bufferedWriter.append(entry.getKey());
       for (Integer runLength : entry.getValue()) {
-        String encodedRun =
-            isCompressed ? encodeRunLength(runLength) : encodeRunLengthCompressed(runLength);
-        bufferedWriter.append(encodedRun);
+        if (isCompressed) {
+          encodeRunLength(bufferedWriter, runLength);
+        } else {
+          encodeRunLengthUnCompressed(bufferedWriter, runLength);
+        }
       }
       bufferedWriter.append("\n");
     }
@@ -125,11 +127,12 @@ public class BitMapIndex {
       throws IOException {
     String fileName = file.toPath().getFileName().toString();
     Path mergedIndexPath = Paths.get(
-        String.format("data/output/merged/%s-index-%s-%s", fieldEnum.getName(),
-            isCompressed ? "compressed"
-                : "uncompressed", fileName));
+        String.format("data/output/merged/compressed/%s-index-%s-%s", fieldEnum.getName(),
+            "compressed", fileName));
+
 
     BufferedWriter bufferedWriter = Files.newBufferedWriter(mergedIndexPath);
+
 
     List<PartialIndexReader> readerList = new ArrayList<>();
     Path directory = Paths.get("data/output/index/" + fieldEnum.getName());
@@ -137,10 +140,11 @@ public class BitMapIndex {
     // For each file, get a buffered reader
     Files.walk(directory)
         .filter(Files::isRegularFile)
+        .sorted()
         .forEach(f -> {
           try {
             readerList.add(
-                new PartialIndexReader(f.toString(), tuplesInABuffer, fieldEnum.getFieldLength()));
+                new PartialIndexReader(f.toString(), fieldEnum.getFieldLength()));
           } catch (IOException e) {
             e.printStackTrace();
           }
@@ -166,7 +170,7 @@ public class BitMapIndex {
           currentRuns.set(0, firstIndex - lastIndex);
           lastIndex += currentRuns.stream().reduce(0, (a, b) -> a + b + 1);
           for (Integer run : currentRuns) {
-            bufferedWriter.append(encodeRunLength(run));
+            encodeRunLength(bufferedWriter, run);
           }
           // point to the next index in the partialReader
           reader.getNextIndex();
@@ -193,7 +197,7 @@ public class BitMapIndex {
       // get the lastIndex of the current bitVector
       int lastIndex = currentList.stream().reduce(0, (a, b) -> a + b + 1);
       // get the run length
-      currentList.add(i - lastIndex);
+      currentList.add((i % tuplesInABuffer) - lastIndex);
     } else {
       ArrayList<Integer> runs = new ArrayList<>();
       runs.add(i % tuplesInABuffer);
@@ -202,9 +206,33 @@ public class BitMapIndex {
     }
   }
 
-  private String compressRuns(ArrayList<Integer> runs) {
-    // concatenate runs to a single string
-    return runs.stream().map(this::encodeRunLength).collect(Collectors.joining(""));
+  public void unCompressRuns(FieldEnum fieldEnum)
+      throws IOException {
+    String fileName = file.toPath().getFileName().toString();
+    Path mergedIndexPath = Paths.get(
+        String.format("data/output/merged/compressed/%s-index-%s-%s", fieldEnum.getName(),
+            "compressed", fileName));
+    Path uncompressedMergedIndexPath = Paths.get(
+        String.format("data/output/merged/uncompressed/%s-index-%s-%s", fieldEnum.getName(),
+            "uncompressed", fileName));
+    PartialIndexReader partialIndexReader = new PartialIndexReader(mergedIndexPath.toString(),fieldEnum.getFieldLength());
+    BufferedWriter bufferedWriterUncompressed = Files
+        .newBufferedWriter(uncompressedMergedIndexPath);
+    Entry<String, ArrayList<Integer>> entry;
+    while((entry= partialIndexReader.getNextIndex())!=null){
+      bufferedWriterUncompressed.append(entry.getKey());
+      int sum=0;
+      for (Integer run : entry.getValue()) {
+        sum+=run+1;
+        encodeRunLengthUnCompressed(bufferedWriterUncompressed, run);
+      }
+      while(sum < numberOfRecords){
+        bufferedWriterUncompressed.append('0');
+        sum++;
+      }
+      bufferedWriterUncompressed.append("\n");
+    }
+    bufferedWriterUncompressed.close();
   }
 
   private String decompressRuns(String encodedLine) {
@@ -225,28 +253,25 @@ public class BitMapIndex {
     return stringBuilder.toString();
   }
 
-  private String encodeRunLength(int i) {
+  private void encodeRunLength(BufferedWriter bufferedWriter, int i) throws IOException {
     int j = log2(i);
-    StringBuilder sb = new StringBuilder();
     // j - 1 bits to 1
     for (int bit = 0; bit < j; bit++) {
-      sb.append("1");
+      bufferedWriter.append('1');
     }
     // last bit to zero
-    sb.append("0");
+    bufferedWriter.append('0');
     // append the actual run length
-    sb.append(Integer.toBinaryString(i));
-    return sb.toString();
+    bufferedWriter.append(Integer.toBinaryString(i));
   }
 
-  private String encodeRunLengthCompressed(int run) {
-    StringBuilder stringBuilder = new StringBuilder();
+  private void encodeRunLengthUnCompressed(BufferedWriter bufferedWriter, int run)
+      throws IOException {
     // set run bits to 0
     for (int i = 0; i < run; i++) {
-      stringBuilder.append("0");
+      bufferedWriter.append('0');
     }
     // set the final bit to 1
-    stringBuilder.append("1");
-    return stringBuilder.toString();
+    bufferedWriter.append('1');
   }
 }

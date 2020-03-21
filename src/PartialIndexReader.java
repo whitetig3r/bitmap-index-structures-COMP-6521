@@ -11,14 +11,12 @@ public class PartialIndexReader {
 
   BufferedReader bufferedReader;
   Entry<String, ArrayList<Integer>> index;
-  private int tuplesInABuffer;
   private int fieldLength;
   String path;
 
-  public PartialIndexReader(String path, int tuplesInABuffer, int fieldLength) throws IOException {
+  public PartialIndexReader(String path, int fieldLength) throws IOException {
     bufferedReader = Files.newBufferedReader(Paths.get(path));
     this.path = path;
-    this.tuplesInABuffer = tuplesInABuffer;
     this.fieldLength = fieldLength;
   }
 

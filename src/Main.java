@@ -20,9 +20,15 @@ public class Main {
         .mergePartialIndexes(FieldEnum.DATE, true);
     bitMapIndex
         .mergePartialIndexes(FieldEnum.GENDER, true);
+    Instant compressedIndexFinish = Instant.now();
+    long timeElapsedPartialMerge = Duration.between(partialIndexFinish, compressedIndexFinish).toMillis();
+    System.out.printf("Partial Indexes(compressed) merged in %f seconds\n", timeElapsedPartialMerge / 1000.0);
+    System.out.println("Uncompressing indexes");
+    bitMapIndex.unCompressRuns(FieldEnum.EMP_ID);
+    bitMapIndex.unCompressRuns(FieldEnum.DATE);
+bitMapIndex.unCompressRuns(FieldEnum.GENDER);
     Instant executionFinish = Instant.now();
-    long timeElapsedPartialMerge = Duration.between(partialIndexFinish, executionFinish).toMillis();
-    System.out.printf("Partial Indexes merged in %f seconds\n", timeElapsedPartialMerge / 1000.0);
+
     long timeElapsed = Duration.between(executionStart, executionFinish).toMillis();
     System.out.printf("total time to create Indexes - %f seconds\n", timeElapsed / 1000.0);
 
