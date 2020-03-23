@@ -325,7 +325,7 @@ public class BitMapIndex {
     BufferedWriter bufferedWriter = Files.newBufferedWriter(new File("data/output/merged/final/records.txt").toPath());
 
     while ((line = bufferedReader.readLine()) != null) {
-      int recordToRetrieveSeekPos = Integer.parseInt(line.split(",")[1]) * RECORD_SIZE;
+      long recordToRetrieveSeekPos = Integer.parseInt(line.split(",")[1]) * RECORD_SIZE;
       raf.seek(recordToRetrieveSeekPos);
       bufferedWriter.append(raf.readLine()).append(System.lineSeparator());
     }
