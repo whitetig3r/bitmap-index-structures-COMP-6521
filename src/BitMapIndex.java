@@ -1,7 +1,4 @@
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -289,7 +286,7 @@ public class BitMapIndex {
     BufferedWriter writer = Files.newBufferedWriter(Paths.get("data/output/merged/final/empId-final.txt"));
     while((latestRecord = getLatestDate(empReader, datePath)) != null) {
       writer.append(latestRecord.getKey());
-      writer.append(", ");
+      writer.append(",");
       writer.append(String.valueOf(latestRecord.getValue()));
       writer.append("\n");
     }
@@ -319,4 +316,22 @@ public class BitMapIndex {
     }
     return null;
   }
+
+  public void reconstructRecordFile() throws IOException {
+    String line;
+
+    BufferedReader bufferedReader = Files.newBufferedReader(new File("data/output/merged/final/empId-final.txt").toPath());
+    RandomAccessFile raf = new RandomAccessFile(this.file, "r");
+    BufferedWriter bufferedWriter = Files.newBufferedWriter(new File("data/output/merged/final/records.txt").toPath());
+
+    while ((line = bufferedReader.readLine()) != null) {
+      int recordToRetrieveSeekPos = Integer.parseInt(line.split(",")[1]) * RECORD_SIZE;
+      raf.seek(recordToRetrieveSeekPos);
+      bufferedWriter.append(raf.readLine()).append(System.lineSeparator());
+    }
+
+    bufferedWriter.close();
+    bufferedReader.close();
+  }
+
 }
