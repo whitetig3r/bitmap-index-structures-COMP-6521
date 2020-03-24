@@ -9,17 +9,19 @@ public class BitMapIndex {
 
   public final int RECORD_SIZE = 101;
   int tuplesInABuffer;
+  private String inputFileName;
   private File file;
   private int numberOfRecords;
 
-  public BitMapIndex(String fileLocation, int tuplesInABuffer, boolean doCleanUp)
+  public BitMapIndex(String fileLocation, String inputFileName, int tuplesInABuffer, boolean doCleanUp)
       throws IOException {
     file = new File(fileLocation);
     this.tuplesInABuffer = tuplesInABuffer;
+    this.inputFileName = inputFileName;
     numberOfRecords = (int) Math.ceil(file.length() / (float) RECORD_SIZE);
     if (doCleanUp) {
       for (FieldEnum fieldEnum : FieldEnum.values()) {
-        cleanUp(String.format("data/output/index/%s", fieldEnum.getName()));
+        cleanUp(String.format("data/output/index/%s/%s", fieldEnum.getName(), inputFileName));
       }
       cleanUp("data/output/merged/compressed");
       cleanUp("data/output/merged/uncompressed");
@@ -97,7 +99,7 @@ public class BitMapIndex {
       throws IOException {
     String fileName = file.toPath().getFileName().toString();
     Path indexPath = Paths.get(
-        String.format("data/output/index/%s/%s-index-%03d-%s-%s", indexField, indexField, run,
+        String.format("data/output/index/%s/%s/%s-index-%03d-%s-%s", indexField, inputFileName, indexField, run,
             isCompressed ? "compressed"
                 : "uncompressed", fileName));
 
@@ -129,7 +131,7 @@ public class BitMapIndex {
 
 
     List<PartialIndexReader> readerList = new ArrayList<>();
-    Path directory = Paths.get("data/output/index/" + fieldEnum.getName());
+    Path directory = Paths.get("data/output/index/" + fieldEnum.getName() + "/" + inputFileName);
 
     // For each file, get a buffered reader
     Files.walk(directory)
@@ -283,7 +285,7 @@ public class BitMapIndex {
                     "uncompressed", dateFileName));
 
     Entry<String, Integer> latestRecord;
-    BufferedWriter writer = Files.newBufferedWriter(Paths.get("data/output/merged/final/empId-final.txt"));
+    BufferedWriter writer = Files.newBufferedWriter(Paths.get("data/output/merged/final/empId-" + inputFileName + ".txt"));
     while((latestRecord = getLatestDate(empReader, datePath)) != null) {
       writer.append(latestRecord.getKey());
       writer.append(",");
@@ -316,22 +318,4 @@ public class BitMapIndex {
     }
     return null;
   }
-
-  public void reconstructRecordFile() throws IOException {
-    String line;
-
-    BufferedReader bufferedReader = Files.newBufferedReader(new File("data/output/merged/final/empId-final.txt").toPath());
-    RandomAccessFile raf = new RandomAccessFile(this.file, "r");
-    BufferedWriter bufferedWriter = Files.newBufferedWriter(new File("data/output/merged/final/records.txt").toPath());
-
-    while ((line = bufferedReader.readLine()) != null) {
-      long recordToRetrieveSeekPos = Integer.parseInt(line.split(",")[1]) * RECORD_SIZE;
-      raf.seek(recordToRetrieveSeekPos);
-      bufferedWriter.append(raf.readLine()).append(System.lineSeparator());
-    }
-
-    bufferedWriter.close();
-    bufferedReader.close();
-  }
-
 }
