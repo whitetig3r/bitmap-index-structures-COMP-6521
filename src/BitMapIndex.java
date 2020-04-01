@@ -65,6 +65,7 @@ public class BitMapIndex {
     SortedMap<String, ArrayList<Integer>> empIdBitVectors = new TreeMap<>();
     SortedMap<String, ArrayList<Integer>> dateBitVectors = new TreeMap<>();
     SortedMap<String, ArrayList<Integer>> genderBitVectors = new TreeMap<>();
+    SortedMap<String, ArrayList<Integer>> deptBitVectors = new TreeMap<>();
     String line;
     int i = 0;
     int tuplesInLastChunk = numberOfRecords % tuplesInABuffer;
@@ -74,9 +75,11 @@ public class BitMapIndex {
       String empId = FieldEnum.EMP_ID.getValue(line);
       String date = FieldEnum.DATE.getValue(line);
       String gender = FieldEnum.GENDER.getValue(line);
+      String dept = FieldEnum.DEPT.getValue(line);
       addRecordToIndex(empIdBitVectors, i, empId);
       addRecordToIndex(dateBitVectors, i, date);
       addRecordToIndex(genderBitVectors, i, gender);
+      addRecordToIndex(deptBitVectors, i, dept);
       i++;
       if (i % tuplesInABuffer == 0 || i == numberOfRecords) {
         int run = (int) Math.ceil(i / (float) tuplesInABuffer);
@@ -84,6 +87,7 @@ public class BitMapIndex {
         generateIndex(FieldEnum.EMP_ID.getName(), empIdBitVectors, isCompressed, run);
         generateIndex(FieldEnum.DATE.getName(), dateBitVectors, isCompressed, run);
         generateIndex(FieldEnum.GENDER.getName(), genderBitVectors, isCompressed, run);
+        generateIndex(FieldEnum.DEPT.getName(), deptBitVectors, isCompressed, run);
         // TODO check if this disk IO count is correct
         writeCount += 3;
       }

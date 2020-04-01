@@ -1,6 +1,7 @@
 public enum FieldEnum {
   EMP_ID(0, 8, "empId"),
   DATE(8, 18, "date"),
+  DEPT(44, 47, "dept"),
   GENDER(43, 44, "gender");
   String name;
   int startIndex, endIndex;

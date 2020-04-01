@@ -95,7 +95,7 @@ public class Main {
     BitMapIndex bitMapIndexT1 = new BitMapIndex(args[0], "T1", 10, true);
     bitMapIndexT1.createIndex(true);
 
-    BitMapIndex bitMapIndexT2 = new BitMapIndex(args[1], "T2", 10, false);
+    BitMapIndex bitMapIndexT2 = new BitMapIndex(args[1], "T2", 10, true);
     bitMapIndexT2.createIndex(true);
 
     Instant partialIndexFinish = Instant.now();
@@ -109,6 +109,8 @@ public class Main {
         .mergePartialIndexes(FieldEnum.DATE, true);
     bitMapIndexT1
         .mergePartialIndexes(FieldEnum.GENDER, true);
+    bitMapIndexT1
+        .mergePartialIndexes(FieldEnum.DEPT, true);
 
     bitMapIndexT2
             .mergePartialIndexes(FieldEnum.EMP_ID, true);
@@ -116,6 +118,8 @@ public class Main {
             .mergePartialIndexes(FieldEnum.DATE, true);
     bitMapIndexT2
             .mergePartialIndexes(FieldEnum.GENDER, true);
+    bitMapIndexT2
+        .mergePartialIndexes(FieldEnum.DEPT, true);
 
 
     Instant compressedIndexFinish = Instant.now();
@@ -128,10 +132,12 @@ public class Main {
     bitMapIndexT1.unCompressRuns(FieldEnum.EMP_ID);
     bitMapIndexT1.unCompressRuns(FieldEnum.DATE);
     bitMapIndexT1.unCompressRuns(FieldEnum.GENDER);
+    bitMapIndexT1.unCompressRuns(FieldEnum.DEPT);
 
     bitMapIndexT2.unCompressRuns(FieldEnum.EMP_ID);
     bitMapIndexT2.unCompressRuns(FieldEnum.DATE);
     bitMapIndexT2.unCompressRuns(FieldEnum.GENDER);
+    bitMapIndexT2.unCompressRuns(FieldEnum.DEPT);
 
     Instant executionFinish = Instant.now();
 
