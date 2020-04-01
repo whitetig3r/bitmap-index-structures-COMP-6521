@@ -82,7 +82,7 @@ public class Main {
     bufferedReaderT2.close();
   }
 
-  private static String getRecord(long indexT1, RandomAccessFile raf) throws IOException {
+  public static String getRecord(long indexT1, RandomAccessFile raf) throws IOException {
     raf.seek(indexT1);
     return raf.readLine();
   }
@@ -92,10 +92,10 @@ public class Main {
 
     Instant executionStart = Instant.now();
 
-    BitMapIndex bitMapIndexT1 = new BitMapIndex(args[0], "T1", 10, true);
+    BitMapIndex bitMapIndexT1 = new BitMapIndex(args[0], "T1", 7000, true);
     bitMapIndexT1.createIndex(true);
 
-    BitMapIndex bitMapIndexT2 = new BitMapIndex(args[1], "T2", 10, true);
+    BitMapIndex bitMapIndexT2 = new BitMapIndex(args[1], "T2", 7000, true);
     bitMapIndexT2.createIndex(true);
 
     Instant partialIndexFinish = Instant.now();
@@ -139,10 +139,13 @@ public class Main {
     bitMapIndexT2.unCompressRuns(FieldEnum.GENDER);
     bitMapIndexT2.unCompressRuns(FieldEnum.DEPT);
 
-    Instant executionFinish = Instant.now();
+    Instant executionFinishUncompressed = Instant.now();
+    long timeElapsedUncompressed = Duration.between(compressedIndexFinish, executionFinishUncompressed).toMillis();
+    System.out.printf("total time to create Uncompressed Indexes - %f seconds\n", timeElapsedUncompressed / 1000.0);
 
     bitMapIndexT1.eliminateDuplicates();
     bitMapIndexT2.eliminateDuplicates();
+    Instant executionFinish = Instant.now();
 
     reconstructRecordFile(args[0], args[1]);
 
