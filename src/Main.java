@@ -143,11 +143,10 @@ public class Main {
     long timeElapsedUncompressed = Duration.between(compressedIndexFinish, executionFinishUncompressed).toMillis();
     System.out.printf("total time to create Uncompressed Indexes - %f seconds\n", timeElapsedUncompressed / 1000.0);
 
-    bitMapIndexT1.eliminateDuplicates();
-    bitMapIndexT2.eliminateDuplicates();
+    BitMapIndex.eliminateDuplicates(bitMapIndexT1,bitMapIndexT2);
     Instant executionFinish = Instant.now();
 
-    reconstructRecordFile(args[0], args[1]);
+//    reconstructRecordFile(args[0], args[1]);
 
     long timeElapsed = Duration.between(executionStart, executionFinish).toMillis();
     System.out.printf("total time to create Indexes - %f seconds\n", timeElapsed / 1000.0);
