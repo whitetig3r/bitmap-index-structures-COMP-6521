@@ -20,7 +20,7 @@ public class IndexReader {
         this.path = path;
         this.fieldLength = fieldLength;
         raf = new RandomAccessFile(this.path, "r");
-        this.lineLength = fieldLength + numberOfRecords + 1;
+        this.lineLength = fieldLength + numberOfRecords + System.lineSeparator().length();
         this.tupleLength = (int) Math.ceil(raf.length() / (float) lineLength);
     }
 
