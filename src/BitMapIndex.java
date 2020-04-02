@@ -1,8 +1,4 @@
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.IOException;
-import java.io.RandomAccessFile;
+import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -17,7 +13,7 @@ import java.util.function.UnaryOperator;
 
 public class BitMapIndex {
 
-  public final int RECORD_SIZE = 101;
+  public int RECORD_SIZE;
   int tuplesInABuffer;
   private String inputFileName;
   private File file;
@@ -29,6 +25,7 @@ public class BitMapIndex {
     file = new File(fileLocation);
     this.tuplesInABuffer = tuplesInABuffer;
     this.inputFileName = inputFileName;
+    this.RECORD_SIZE = Main.determineRecordSize(file);
     numberOfRecords = (int) Math.ceil(file.length() / (float) RECORD_SIZE);
     if (doCleanUp) {
       for (FieldEnum fieldEnum : FieldEnum.values()) {
@@ -129,7 +126,7 @@ public class BitMapIndex {
           encodeRunLengthUnCompressed(bufferedWriter, runLength);
         }
       }
-      bufferedWriter.append("\n");
+      bufferedWriter.append(System.lineSeparator());
     }
     bitVectors.clear();
     bufferedWriter.close();
@@ -186,7 +183,7 @@ public class BitMapIndex {
           reader.getNextIndex();
         }
       }
-      bufferedWriter.append("\n");
+      bufferedWriter.append(System.lineSeparator());
     }
     bufferedWriter.close();
   }
@@ -241,7 +238,7 @@ public class BitMapIndex {
         bufferedWriterUncompressed.append('0');
         sum++;
       }
-      bufferedWriterUncompressed.append("\n");
+      bufferedWriterUncompressed.append(System.lineSeparator());
     }
     bufferedWriterUncompressed.close();
   }
@@ -307,7 +304,7 @@ public class BitMapIndex {
       writer.append(latestRecord.getKey());
       writer.append(",");
       writer.append(String.valueOf(latestRecord.getValue()));
-      writer.append("\n");
+      writer.append(System.lineSeparator());
     }
     writer.close();
   }
@@ -406,8 +403,8 @@ public class BitMapIndex {
         break;
       }
 
-      int empT1 = Integer.parseInt(lineT1.substring(0,8));
-      int empT2 = Integer.parseInt(lineT2.substring(0,8));
+      int empT1 = Integer.parseInt(lineT1.substring(0, 8));
+      int empT2 = Integer.parseInt(lineT2.substring(0, 8));
 
       if(empT1 < empT2) {
         bufferedWriter.append(lineT1).append(System.lineSeparator());
