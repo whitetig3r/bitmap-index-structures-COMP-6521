@@ -17,7 +17,7 @@ public class Main {
   }
 
   public static void main(String[] args) throws IOException {
-    System.out.println("Creating indexes for empId, date, gender");
+    System.out.println("Creating indexes for empId, department, gender");
 
     Instant executionStart = Instant.now();
 
@@ -33,49 +33,57 @@ public class Main {
     System.out.printf("Partial Indexes created in %f seconds\n", timeElapsedPartialIndex / 1000.0);
 
     bitMapIndexT1
-        .mergePartialIndexes(FieldEnum.EMP_ID, true);
+        .mergePartialIndexes(FieldEnum.EMP_ID);
     bitMapIndexT1
-        .mergePartialIndexes(FieldEnum.DATE, true);
+        .mergePartialIndexes(FieldEnum.GENDER);
     bitMapIndexT1
-        .mergePartialIndexes(FieldEnum.GENDER, true);
-    bitMapIndexT1
-        .mergePartialIndexes(FieldEnum.DEPT, true);
+        .mergePartialIndexes(FieldEnum.DEPT);
 
     bitMapIndexT2
-            .mergePartialIndexes(FieldEnum.EMP_ID, true);
+            .mergePartialIndexes(FieldEnum.EMP_ID);
     bitMapIndexT2
-            .mergePartialIndexes(FieldEnum.DATE, true);
+            .mergePartialIndexes(FieldEnum.GENDER);
     bitMapIndexT2
-            .mergePartialIndexes(FieldEnum.GENDER, true);
-    bitMapIndexT2
-        .mergePartialIndexes(FieldEnum.DEPT, true);
+        .mergePartialIndexes(FieldEnum.DEPT);
 
+    System.out.print("\nAfter Compressing T1 -- \n");
+    System.out.printf("Reads: %d  Writes: %d\n",bitMapIndexT1.readCount, bitMapIndexT1.writeCount);
+    System.out.print("After Compressing T2 -- \n");
+    System.out.printf("Reads: %d  Writes: %d\n",bitMapIndexT2.readCount, bitMapIndexT2.writeCount);
+
+    int readsAfterCompressingT1 = bitMapIndexT1.readCount;
+    int writesAfterCompressingT1 = bitMapIndexT1.writeCount;
+    int readsAfterCompressingT2 = bitMapIndexT2.readCount;
+    int writesAfterCompressingT2 = bitMapIndexT2.writeCount;
 
     Instant compressedIndexFinish = Instant.now();
 
     long timeElapsedPartialMerge = Duration.between(partialIndexFinish, compressedIndexFinish).toMillis();
 
-    System.out.printf("Partial Indexes(compressed) merged in %f seconds\n", timeElapsedPartialMerge / 1000.0);
-    System.out.println("Uncompressing indexes");
+    System.out.printf("\nPartial Indexes(compressed) merged in %f seconds\n", timeElapsedPartialMerge / 1000.0);
+    System.out.println("Uncompressing indexes...");
 
     bitMapIndexT1.unCompressRuns(FieldEnum.EMP_ID);
-    bitMapIndexT1.unCompressRuns(FieldEnum.DATE);
     bitMapIndexT1.unCompressRuns(FieldEnum.GENDER);
     bitMapIndexT1.unCompressRuns(FieldEnum.DEPT);
 
     bitMapIndexT2.unCompressRuns(FieldEnum.EMP_ID);
-    bitMapIndexT2.unCompressRuns(FieldEnum.DATE);
     bitMapIndexT2.unCompressRuns(FieldEnum.GENDER);
     bitMapIndexT2.unCompressRuns(FieldEnum.DEPT);
 
+    System.out.print("\nAfter Uncompressing T1 -- \n");
+    System.out.printf("Reads: %d  Writes: %d\n",bitMapIndexT1.readCount-readsAfterCompressingT1, bitMapIndexT1.writeCount-writesAfterCompressingT1);
+    System.out.print("After Uncompressing T2 -- \n");
+    System.out.printf("Reads: %d  Writes: %d\n",bitMapIndexT2.readCount-readsAfterCompressingT2, bitMapIndexT2.writeCount-writesAfterCompressingT2);
+
     Instant executionFinishUncompressed = Instant.now();
     long timeElapsedUncompressed = Duration.between(compressedIndexFinish, executionFinishUncompressed).toMillis();
-    System.out.printf("total time to create Uncompressed Indexes - %f seconds\n", timeElapsedUncompressed / 1000.0);
+    System.out.printf("\nTotal time to create Uncompressed Indexes - %f seconds\n", timeElapsedUncompressed / 1000.0);
 
     BitMapIndex.eliminateDuplicates(bitMapIndexT1,bitMapIndexT2);
     Instant executionFinish = Instant.now();
 
     long timeElapsed = Duration.between(executionStart, executionFinish).toMillis();
-    System.out.printf("total time to create Indexes - %f seconds\n", timeElapsed / 1000.0);
+    System.out.printf("\nTotal time to create Indexes - %f seconds\n", timeElapsed / 1000.0);
   }
 }

@@ -18,6 +18,8 @@ public class BitMapIndex {
   private String inputFileName;
   private File file;
   private int numberOfRecords;
+  public  int writeCount = 0;
+  public  int readCount = 0;
 
   public BitMapIndex(String fileLocation, String inputFileName, int tuplesInABuffer,
       boolean doCleanUp)
@@ -71,38 +73,30 @@ public class BitMapIndex {
   public void createIndex(boolean isCompressed) throws IOException {
     BufferedReader bufferedReader = Files.newBufferedReader(file.toPath());
     SortedMap<String, ArrayList<Integer>> empIdBitVectors = new TreeMap<>();
-    SortedMap<String, ArrayList<Integer>> dateBitVectors = new TreeMap<>();
     SortedMap<String, ArrayList<Integer>> genderBitVectors = new TreeMap<>();
     SortedMap<String, ArrayList<Integer>> deptBitVectors = new TreeMap<>();
     String line;
     int i = 0;
-    int tuplesInLastChunk = numberOfRecords % tuplesInABuffer;
-    int readCount = 0;
-    int writeCount = 0;
+
     while ((line = bufferedReader.readLine()) != null) {
       String empId = FieldEnum.EMP_ID.getValue(line);
-      String date = FieldEnum.DATE.getValue(line);
       String gender = FieldEnum.GENDER.getValue(line);
       String dept = FieldEnum.DEPT.getValue(line);
       addRecordToIndex(empIdBitVectors, i, empId);
-      addRecordToIndex(dateBitVectors, i, date);
       addRecordToIndex(genderBitVectors, i, gender);
       addRecordToIndex(deptBitVectors, i, dept);
       i++;
       if (i % tuplesInABuffer == 0 || i == numberOfRecords) {
         int run = (int) Math.ceil(i / (float) tuplesInABuffer);
-        readCount += 1;
         generateIndex(FieldEnum.EMP_ID.getName(), empIdBitVectors, isCompressed, run);
-        generateIndex(FieldEnum.DATE.getName(), dateBitVectors, isCompressed, run);
         generateIndex(FieldEnum.GENDER.getName(), genderBitVectors, isCompressed, run);
         generateIndex(FieldEnum.DEPT.getName(), deptBitVectors, isCompressed, run);
-        // TODO check if this disk IO count is correct
-        writeCount += 3;
       }
     }
-    System.out.printf("Reads:%d, Writes:%d\n", readCount, writeCount);
-    bufferedReader.close();
+    if(numberOfRecords < 40) readCount += 1;
+    else readCount += (int)Math.ceil(numberOfRecords/40.0);
 
+    bufferedReader.close();
 
   }
 
@@ -110,6 +104,7 @@ public class BitMapIndex {
       SortedMap<String, ArrayList<Integer>> bitVectors, boolean isCompressed, int run)
       throws IOException {
     String fileName = file.toPath().getFileName().toString();
+    int localBytesWrittenCounter = 0;
     Path indexPath = Paths.get(
         String.format("data/output/index/%s/%s/%s-index-%03d-%s-%s", indexField, inputFileName,
             indexField, run,
@@ -119,22 +114,27 @@ public class BitMapIndex {
     BufferedWriter bufferedWriter = Files.newBufferedWriter(indexPath);
     for (Entry<String, ArrayList<Integer>> entry : bitVectors.entrySet()) {
       bufferedWriter.append(entry.getKey());
+      int loopBytesWrittenCounter = entry.getKey().length();
       for (Integer runLength : entry.getValue()) {
         if (isCompressed) {
-          encodeRunLength(bufferedWriter, runLength);
+          loopBytesWrittenCounter += encodeRunLength(bufferedWriter, runLength);
         } else {
-          encodeRunLengthUnCompressed(bufferedWriter, runLength);
+          loopBytesWrittenCounter += encodeRunLengthUnCompressed(bufferedWriter, runLength);
         }
       }
       bufferedWriter.append(System.lineSeparator());
+      loopBytesWrittenCounter += System.lineSeparator().length();
+      localBytesWrittenCounter += loopBytesWrittenCounter;
     }
+    writeCount += (int) Math.ceil(localBytesWrittenCounter/4096.0);
     bitVectors.clear();
     bufferedWriter.close();
   }
 
-  public void mergePartialIndexes(FieldEnum fieldEnum, boolean isCompressed)
+  public void mergePartialIndexes(FieldEnum fieldEnum)
       throws IOException {
     String fileName = file.toPath().getFileName().toString();
+    int localBytesWrittenBytesCounter = 0;
     Path mergedIndexPath = Paths.get(
         String.format("data/output/merged/compressed/%s-index-%s-%s", fieldEnum.getName(),
             "compressed", fileName));
@@ -156,17 +156,18 @@ public class BitMapIndex {
             e.printStackTrace();
           }
         });
-
     // Key = empId, Value = runs as the array list
     // Initial Fill
     for (PartialIndexReader partialIndexReader : readerList) {
-      partialIndexReader.getNextIndex();
+      partialIndexReader.getNextIndex(this);
     }
 
     String minIndex;
     while ((minIndex = getMinOfAllPartialIndexes(readerList))
         != null) {
       bufferedWriter.append(minIndex);
+      int loopBytesWrittenCounter = 0;
+      loopBytesWrittenCounter += minIndex.length();
       int lastIndex = 0;
       for (int i = 0; i < readerList.size(); i++) {
         PartialIndexReader reader = readerList.get(i);
@@ -177,14 +178,17 @@ public class BitMapIndex {
           currentRuns.set(0, firstIndex - lastIndex);
           lastIndex += currentRuns.stream().reduce(0, (a, b) -> a + b + 1);
           for (Integer run : currentRuns) {
-            encodeRunLength(bufferedWriter, run);
+            loopBytesWrittenCounter += encodeRunLength(bufferedWriter, run);
           }
           // point to the next index in the partialReader
-          reader.getNextIndex();
+          reader.getNextIndex(this);
         }
       }
       bufferedWriter.append(System.lineSeparator());
+      loopBytesWrittenCounter += System.lineSeparator().length();
+      localBytesWrittenBytesCounter += loopBytesWrittenCounter;
     }
+    writeCount += (int) Math.ceil(localBytesWrittenBytesCounter/4096.0);
     bufferedWriter.close();
   }
 
@@ -227,111 +231,53 @@ public class BitMapIndex {
     BufferedWriter bufferedWriterUncompressed = Files
         .newBufferedWriter(uncompressedMergedIndexPath);
     Entry<String, ArrayList<Integer>> entry;
-    while ((entry = partialIndexReader.getNextIndex()) != null) {
+    while ((entry = partialIndexReader.getNextIndex(this)) != null) {
+      int loopBytesWrittenCounter = 0;
       bufferedWriterUncompressed.append(entry.getKey());
       int sum = 0;
       for (Integer run : entry.getValue()) {
         sum += run + 1;
-        encodeRunLengthUnCompressed(bufferedWriterUncompressed, run);
+        loopBytesWrittenCounter += encodeRunLengthUnCompressed(bufferedWriterUncompressed, run);
       }
       while (sum < numberOfRecords) {
         bufferedWriterUncompressed.append('0');
+        loopBytesWrittenCounter += 1;
         sum++;
       }
       bufferedWriterUncompressed.append(System.lineSeparator());
+      loopBytesWrittenCounter += System.lineSeparator().length();
+      writeCount += (int)Math.ceil(loopBytesWrittenCounter/4096.0);
     }
     bufferedWriterUncompressed.close();
   }
 
-  private String decompressRuns(String encodedLine) {
-    ArrayList<Integer> runs = decodeRunLength(encodedLine);
-    StringBuilder stringBuilder = new StringBuilder();
-    for (int run : runs) {
-      // set run bits to 0
-      for (int i = 0; i < run; i++) {
-        stringBuilder.append("0");
-      }
-      // set the final bit to 1
-      stringBuilder.append("1");
-    }
-    // trailing zeros if any
-    while (stringBuilder.length() < numberOfRecords) {
-      stringBuilder.append("0");
-    }
-    return stringBuilder.toString();
-  }
-
-  private void encodeRunLength(BufferedWriter bufferedWriter, int i) throws IOException {
+  private int encodeRunLength(BufferedWriter bufferedWriter, int i) throws IOException {
     int j = log2(i);
+    int localBytesWrittenCounter = 0;
     // j - 1 bits to 1
     for (int bit = 0; bit < j; bit++) {
       bufferedWriter.append('1');
+      localBytesWrittenCounter += 1;
     }
     // last bit to zero
     bufferedWriter.append('0');
     // append the actual run length
     bufferedWriter.append(Integer.toBinaryString(i));
+    localBytesWrittenCounter += (1 + Integer.toBinaryString(i).length());
+    return localBytesWrittenCounter;
   }
 
-  private void encodeRunLengthUnCompressed(BufferedWriter bufferedWriter, int run)
+  private int encodeRunLengthUnCompressed(BufferedWriter bufferedWriter, int run)
       throws IOException {
+    int localBytesWrittenCounter = 0;
     // set run bits to 0
     for (int i = 0; i < run; i++) {
       bufferedWriter.append('0');
+      localBytesWrittenCounter += 1;
     }
     // set the final bit to 1
     bufferedWriter.append('1');
-  }
-
-  public void eliminateDuplicates() throws IOException {
-
-    String empFileName = file.toPath().getFileName().toString();
-    Path empPath = Paths.get(
-        String.format("data/output/merged/uncompressed/%s-index-%s-%s", FieldEnum.EMP_ID.getName(),
-            "uncompressed", empFileName));
-    IndexReader empReader = new IndexReader(empPath.toString(), numberOfRecords,
-        FieldEnum.EMP_ID.getFieldLength());
-
-    String dateFileName = file.toPath().getFileName().toString();
-    Path datePath = Paths.get(
-        String.format("data/output/merged/uncompressed/%s-index-%s-%s", FieldEnum.DATE.getName(),
-            "uncompressed", dateFileName));
-
-    Entry<String, Integer> latestRecord;
-    BufferedWriter writer = Files
-        .newBufferedWriter(Paths.get("data/output/merged/final/empId-" + inputFileName + ".txt"));
-    while ((latestRecord = getLatestDate(empReader, datePath)) != null) {
-      writer.append(latestRecord.getKey());
-      writer.append(",");
-      writer.append(String.valueOf(latestRecord.getValue()));
-      writer.append(System.lineSeparator());
-    }
-    writer.close();
-  }
-
-  private Entry<String, Integer> getLatestDate(IndexReader empReader, Path datePath)
-      throws IOException {
-    Entry<String, ArrayList<Integer>> currentId;
-    while ((currentId = empReader.getNextIndex()) != null) {
-      if (currentId.getValue().size() > 1) {
-        IndexReader dateReader = new IndexReader(datePath.toString(), numberOfRecords,
-            FieldEnum.DATE.getFieldLength());
-        while (true) {
-          Entry<String, ArrayList<Integer>> currentDate = dateReader.getNextIndexReversed();
-          for (Integer index : currentDate.getValue()) {
-            if (currentId.getValue().contains(index)) {
-              int latestIndex = currentId.getValue().indexOf(index);
-              Integer latestDate = currentId.getValue().get(latestIndex);
-              return new AbstractMap.SimpleEntry<>(currentId.getKey(), latestDate);
-            }
-          }
-        }
-      } else {
-        Integer latestDate = currentId.getValue().get(0);
-        return new AbstractMap.SimpleEntry<>(currentId.getKey(), latestDate);
-      }
-    }
-    return null;
+    return localBytesWrittenCounter + 1;
   }
 
   private String getLatestRecord(IndexReader empReader, RandomAccessFile raf) throws IOException {

@@ -26,9 +26,11 @@ public class PartialIndexReader {
     this.fieldLength = fieldLength;
   }
 
-  public Entry<String, ArrayList<Integer>> getNextIndex() throws IOException {
+  public Entry<String, ArrayList<Integer>> getNextIndex(BitMapIndex bmp) throws IOException {
     char[] key = new char[fieldLength];
+    int localBytesReadCounter = 0;
     bufferedReader.read(key);
+    localBytesReadCounter += fieldLength;
     if(String.valueOf(key).trim().isEmpty()){
       index = null;
       return index;
@@ -37,6 +39,7 @@ public class PartialIndexReader {
     int runLength = 0;
     ArrayList<Integer> runs = new ArrayList<>();
     while ((c = bufferedReader.read()) != -1) {
+      localBytesReadCounter += 1;
       char currentChar = (char) c;
       if (currentChar == '\n') {
         break;
@@ -53,10 +56,13 @@ public class PartialIndexReader {
       runLength++;
       char run[] = new char[runLength];
       bufferedReader.read(run);
+      localBytesReadCounter += runLength;
       runs.add(Integer.valueOf(String.valueOf(run), 2));
       runLength = 0;
     }
     index = new SimpleEntry<>(String.valueOf(key), runs);
+    if(localBytesReadCounter < 4096) bmp.readCount += 1;
+    else bmp.readCount += (int)Math.ceil(localBytesReadCounter/4096.0);
     return index;
   }
 
