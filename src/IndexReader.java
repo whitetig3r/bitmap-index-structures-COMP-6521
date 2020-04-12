@@ -39,7 +39,7 @@ public class IndexReader {
         return new SimpleEntry<>(new String(key), ones);
     }
 
-    public Entry<String, ArrayList<Integer>> getNextIndex() throws IOException {
+    public Entry<String, ArrayList<Integer>> getNextIndex(BitMapIndex bmp) throws IOException {
 
         if(counter == tupleLength) {
             return null;
@@ -48,6 +48,8 @@ public class IndexReader {
         byte[] key = new byte[fieldLength];
         raf.read(key);
         ArrayList<Integer> ones = findOnes();
+
+        bmp.dupElimIndexReads += (int)Math.ceil((fieldLength + lineLength)/4096.0);
         counter++;
         return new SimpleEntry<>(new String(key), ones);
     }

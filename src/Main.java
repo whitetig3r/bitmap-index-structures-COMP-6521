@@ -4,8 +4,9 @@ import java.time.Duration;
 import java.time.Instant;
 
 public class Main {
-  public static String getRecord(long indexT1, RandomAccessFile raf) throws IOException {
+  public static String getRecord(long indexT1, RandomAccessFile raf, BitMapIndex bmp) throws IOException {
     raf.seek(indexT1);
+    bmp.dupElimRecordReads += 1;
     return raf.readLine();
   }
 
@@ -71,18 +72,33 @@ public class Main {
     bitMapIndexT2.unCompressRuns(FieldEnum.GENDER);
     bitMapIndexT2.unCompressRuns(FieldEnum.DEPT);
 
+    int readsAfterUncompressingT1 = bitMapIndexT1.readCount;
+    int writesAfterUncompressingT1 = bitMapIndexT1.writeCount;
+    int readsAfterUncompressingT2 = bitMapIndexT2.readCount;
+    int writesAfterUncompressingT2 = bitMapIndexT2.writeCount;
+
     System.out.print("\nAfter Uncompressing T1 -- \n");
-    System.out.printf("Reads: %d  Writes: %d\n",bitMapIndexT1.readCount-readsAfterCompressingT1, bitMapIndexT1.writeCount-writesAfterCompressingT1);
+    System.out.printf("Reads: %d  Writes: %d\n",readsAfterUncompressingT1-readsAfterCompressingT1,writesAfterUncompressingT1-writesAfterCompressingT1);
     System.out.print("After Uncompressing T2 -- \n");
-    System.out.printf("Reads: %d  Writes: %d\n",bitMapIndexT2.readCount-readsAfterCompressingT2, bitMapIndexT2.writeCount-writesAfterCompressingT2);
+    System.out.printf("Reads: %d  Writes: %d\n",readsAfterUncompressingT2-readsAfterCompressingT2,writesAfterUncompressingT2-writesAfterCompressingT2);
 
     Instant executionFinishUncompressed = Instant.now();
     long timeElapsedUncompressed = Duration.between(compressedIndexFinish, executionFinishUncompressed).toMillis();
     System.out.printf("\nTotal time to create Uncompressed Indexes - %f seconds\n", timeElapsedUncompressed / 1000.0);
 
+    System.out.println("Eliminating duplicates and writing the record file back...\n");
+
     BitMapIndex.eliminateDuplicates(bitMapIndexT1,bitMapIndexT2);
     Instant executionFinish = Instant.now();
 
+    System.out.print("After Eliminating Duplicates T1 & T2 (final writes not counted) -- \n");
+    System.out.printf("Reads from Uncompressed Index File: %d\nReads from Record File: %d\n\n", bitMapIndexT1.dupElimIndexReads+bitMapIndexT2.dupElimIndexReads, bitMapIndexT1.dupElimRecordReads+bitMapIndexT2.dupElimRecordReads);
+
+    bitMapIndexT1.readCount += (bitMapIndexT1.dupElimIndexReads + bitMapIndexT1.dupElimRecordReads);
+    bitMapIndexT2.readCount += (bitMapIndexT2.dupElimIndexReads + bitMapIndexT2.dupElimRecordReads);
+
+
+    System.out.printf("Total Reads: %d | Total Writes: %d\n", bitMapIndexT1.readCount+bitMapIndexT2.readCount, bitMapIndexT1.writeCount+bitMapIndexT2.writeCount);
     long timeElapsed = Duration.between(executionStart, executionFinish).toMillis();
     System.out.printf("\nTotal time to create Indexes - %f seconds\n", timeElapsed / 1000.0);
   }

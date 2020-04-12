@@ -20,6 +20,8 @@ public class BitMapIndex {
   private int numberOfRecords;
   public  int writeCount = 0;
   public  int readCount = 0;
+  public int dupElimIndexReads = 0;
+  public int dupElimRecordReads = 0;
 
   public BitMapIndex(String fileLocation, String inputFileName, int tuplesInABuffer,
       boolean doCleanUp)
@@ -36,27 +38,6 @@ public class BitMapIndex {
       cleanUp("data/output/merged/compressed");
       cleanUp("data/output/merged/uncompressed");
     }
-  }
-
-  public static ArrayList<Integer> decodeRunLength(String encodedLine) {
-    int runLength = 0;
-    ArrayList<Integer> runs = new ArrayList<>();
-    for (int i = 0; i < encodedLine.length(); i++) {
-      // count all 1's
-      if (encodedLine.charAt(i) != '0') {
-        runLength++;
-        continue;
-      }
-      // count the last 0 followed by 1's
-      runLength++;
-      // get the run
-      String run = encodedLine.substring(i + 1, (i + 1) + runLength);
-      runs.add(Integer.valueOf(run, 2));
-      // move to the next run
-      i += runLength;
-      runLength = 0;
-    }
-    return runs;
   }
 
   private void cleanUp(String path) throws IOException {
@@ -85,6 +66,7 @@ public class BitMapIndex {
       addRecordToIndex(empIdBitVectors, i, empId);
       addRecordToIndex(genderBitVectors, i, gender);
       addRecordToIndex(deptBitVectors, i, dept);
+      if(i%40 == 0) readCount += 1;
       i++;
       if (i % tuplesInABuffer == 0 || i == numberOfRecords) {
         int run = (int) Math.ceil(i / (float) tuplesInABuffer);
@@ -93,8 +75,6 @@ public class BitMapIndex {
         generateIndex(FieldEnum.DEPT.getName(), deptBitVectors, isCompressed, run);
       }
     }
-    if(numberOfRecords < 40) readCount += 1;
-    else readCount += (int)Math.ceil(numberOfRecords/40.0);
 
     bufferedReader.close();
 
@@ -134,7 +114,7 @@ public class BitMapIndex {
   public void mergePartialIndexes(FieldEnum fieldEnum)
       throws IOException {
     String fileName = file.toPath().getFileName().toString();
-    int localBytesWrittenBytesCounter = 0;
+    int localBytesWrittenCounter = 0;
     Path mergedIndexPath = Paths.get(
         String.format("data/output/merged/compressed/%s-index-%s-%s", fieldEnum.getName(),
             "compressed", fileName));
@@ -186,9 +166,9 @@ public class BitMapIndex {
       }
       bufferedWriter.append(System.lineSeparator());
       loopBytesWrittenCounter += System.lineSeparator().length();
-      localBytesWrittenBytesCounter += loopBytesWrittenCounter;
+      localBytesWrittenCounter += loopBytesWrittenCounter;
     }
-    writeCount += (int) Math.ceil(localBytesWrittenBytesCounter/4096.0);
+    writeCount += (int) Math.ceil(localBytesWrittenCounter/4096.0);
     bufferedWriter.close();
   }
 
@@ -284,20 +264,20 @@ public class BitMapIndex {
 
   private String getLatestRecord(IndexReader empReader, RandomAccessFile raf) throws IOException {
     UnaryOperator<Integer> getSeek = (index) -> index * RECORD_SIZE;
-    Entry<String, ArrayList<Integer>> currentId = empReader.getNextIndex();
+    Entry<String, ArrayList<Integer>> currentId = empReader.getNextIndex(this);
 
     if (currentId == null) {
       return null;
     }
     // fetch first record
     long seekCurrentIndex = getSeek.apply(currentId.getValue().get(0));
-    String currentLatestRecord = Main.getRecord(seekCurrentIndex, raf);
+    String currentLatestRecord = Main.getRecord(seekCurrentIndex, raf, this);
     // fetch next record
     ArrayList<Integer> value = currentId.getValue();
     for (int i = 1; i < value.size(); i++) {
       Integer nextIndex = value.get(i);
       long seekNextIndex = getSeek.apply(nextIndex);
-      String nextRecord = Main.getRecord(seekNextIndex, raf);
+      String nextRecord = Main.getRecord(seekNextIndex, raf, this);
       if (currentLatestRecord.compareTo(nextRecord) <= 0) {
         currentLatestRecord = nextRecord;
       }
@@ -307,7 +287,6 @@ public class BitMapIndex {
   }
 
   public static void eliminateDuplicates(BitMapIndex t1, BitMapIndex t2) throws IOException {
-
     String empFileNameT1 = t1.file.toPath().getFileName().toString();
     Path empPathT1 = Paths.get(
         String.format("data/output/merged/uncompressed/%s-index-%s-%s", FieldEnum.EMP_ID.getName(),
