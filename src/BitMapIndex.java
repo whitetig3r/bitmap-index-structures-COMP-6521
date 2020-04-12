@@ -219,6 +219,7 @@ public class BitMapIndex {
 
   public void unCompressRuns(FieldEnum fieldEnum)
       throws IOException {
+    int localBytesWrittenCounter = 0;
     String fileName = file.toPath().getFileName().toString();
     Path mergedIndexPath = Paths.get(
         String.format("data/output/merged/compressed/%s-index-%s-%s", fieldEnum.getName(),
@@ -246,8 +247,9 @@ public class BitMapIndex {
       }
       bufferedWriterUncompressed.append(System.lineSeparator());
       loopBytesWrittenCounter += System.lineSeparator().length();
-      writeCount += (int)Math.ceil(loopBytesWrittenCounter/4096.0);
+      localBytesWrittenCounter += loopBytesWrittenCounter;
     }
+    writeCount += (int)Math.ceil(localBytesWrittenCounter/4096.0);
     bufferedWriterUncompressed.close();
   }
 
