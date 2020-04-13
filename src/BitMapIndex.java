@@ -20,8 +20,6 @@ public class BitMapIndex {
   private int numberOfRecords;
   public  int writeCount = 0;
   public  int readCount = 0;
-  public int dupElimIndexReads = 0;
-  public int dupElimRecordReads = 0;
 
   public BitMapIndex(String fileLocation, String inputFileName, int tuplesInABuffer,
       boolean doCleanUp)
@@ -200,6 +198,7 @@ public class BitMapIndex {
   public void unCompressRuns(FieldEnum fieldEnum)
       throws IOException {
     int localBytesWrittenCounter = 0;
+    int recordsWrittenCounter = 0;
     String fileName = file.toPath().getFileName().toString();
     Path mergedIndexPath = Paths.get(
         String.format("data/output/merged/compressed/%s-index-%s-%s", fieldEnum.getName(),
@@ -247,6 +246,11 @@ public class BitMapIndex {
           }
         }
         bufferedWriterIntermediate.append(latestRecord).append(System.lineSeparator());
+        recordsWrittenCounter += 1;
+        if(recordsWrittenCounter == 40) {
+          recordsWrittenCounter = 0;
+          writeCount += 1;
+        }
       }
       loopBytesWrittenCounter += System.lineSeparator().length();
       localBytesWrittenCounter += loopBytesWrittenCounter;
@@ -283,104 +287,6 @@ public class BitMapIndex {
     // set the final bit to 1
     bufferedWriter.append('1');
     return localBytesWrittenCounter + 1;
-  }
-
-  private String getLatestRecord(IndexReader empReader, RandomAccessFile raf) throws IOException {
-    UnaryOperator<Integer> getSeek = (index) -> index * RECORD_SIZE;
-    Entry<String, ArrayList<Integer>> currentId = empReader.getNextIndex(this);
-
-    if (currentId == null) {
-      return null;
-    }
-    // fetch first record
-    long seekCurrentIndex = getSeek.apply(currentId.getValue().get(0));
-    String currentLatestRecord = Main.getRecord(seekCurrentIndex, raf, this);
-    // fetch next record
-    ArrayList<Integer> value = currentId.getValue();
-    for (int i = 1; i < value.size(); i++) {
-      Integer nextIndex = value.get(i);
-      long seekNextIndex = getSeek.apply(nextIndex);
-      String nextRecord = Main.getRecord(seekNextIndex, raf, this);
-      if (currentLatestRecord.compareTo(nextRecord) <= 0) {
-        currentLatestRecord = nextRecord;
-      }
-    }
-    return currentLatestRecord;
-
-  }
-
-  public static void eliminateDuplicates(BitMapIndex t1, BitMapIndex t2) throws IOException {
-    String empFileNameT1 = t1.file.toPath().getFileName().toString();
-    Path empPathT1 = Paths.get(
-        String.format("data/output/merged/uncompressed/%s-index-%s-%s", FieldEnum.EMP_ID.getName(),
-            "uncompressed", empFileNameT1));
-    IndexReader empReaderT1 = new IndexReader(empPathT1.toString(), t1.numberOfRecords,
-        FieldEnum.EMP_ID.getFieldLength());
-    RandomAccessFile rafT1 = new RandomAccessFile(t1.file, "r");
-
-    String empFileNameT2 = t2.file.toPath().getFileName().toString();
-    Path empPathT2 = Paths.get(
-        String.format("data/output/merged/uncompressed/%s-index-%s-%s", FieldEnum.EMP_ID.getName(),
-            "uncompressed", empFileNameT2));
-    IndexReader empReaderT2 = new IndexReader(empPathT2.toString(), t2.numberOfRecords,
-        FieldEnum.EMP_ID.getFieldLength());
-    RandomAccessFile rafT2 = new RandomAccessFile(t2.file, "r");
-
-    BufferedWriter bufferedWriter = Files
-        .newBufferedWriter(Paths.get("data/output/merged/final/records.txt"));
-
-    String lineT1 = t1.getLatestRecord(empReaderT1,rafT1);
-    String lineT2 = t2.getLatestRecord(empReaderT2,rafT2);
-    while (true) {
-
-      if(lineT1 == null && lineT2 == null) {
-        break;
-      }
-
-      if(lineT1 == null) {
-        while(lineT2 != null) {
-          bufferedWriter.append(lineT2).append(System.lineSeparator());
-          lineT2 = t2.getLatestRecord(empReaderT2,rafT2);
-        }
-        break;
-      }
-
-      if(lineT2 == null) {
-        while(lineT1 != null) {
-          bufferedWriter.append(lineT1).append(System.lineSeparator());
-          lineT1 = t1.getLatestRecord(empReaderT1,rafT1);
-        }
-        break;
-      }
-
-      int empT1 = Integer.parseInt(lineT1.substring(0, 8));
-      int empT2 = Integer.parseInt(lineT2.substring(0, 8));
-
-      if(empT1 < empT2) {
-        bufferedWriter.append(lineT1).append(System.lineSeparator());
-        lineT1 = t1.getLatestRecord(empReaderT1,rafT1);
-      }
-      else if(empT1 > empT2) {
-        bufferedWriter.append(lineT2).append(System.lineSeparator());
-        lineT2 = t2.getLatestRecord(empReaderT2,rafT2);
-      }
-      else {
-        String dateT1 = lineT1.substring(8, 18);
-        String dateT2 = lineT2.substring(8, 18);
-
-        if(dateT1.compareTo(dateT2) > 0) {
-          bufferedWriter.append(lineT1).append(System.lineSeparator());
-        }
-        else {
-          bufferedWriter.append(lineT2).append(System.lineSeparator());
-        }
-        lineT1 = t1.getLatestRecord(empReaderT1,rafT1);
-        lineT2 = t2.getLatestRecord(empReaderT2,rafT2);
-      }
-    }
-    rafT1.close();
-    rafT2.close();
-    bufferedWriter.close();
   }
 
 }

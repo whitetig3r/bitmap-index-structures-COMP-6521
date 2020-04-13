@@ -1,13 +1,20 @@
 import java.io.*;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Arrays;
 
 public class Main {
+  public static int getRecordReads = 0;
   public static String getRecord(long indexT1, RandomAccessFile raf, BitMapIndex bmp) throws IOException {
     raf.seek(indexT1);
-    bmp.dupElimRecordReads += 1;
+    getRecordReads += 1;
+    if(getRecordReads == 40) {
+      bmp.readCount += 1;
+      getRecordReads = 0;
+    }
     return raf.readLine();
   }
 
@@ -80,34 +87,41 @@ public class Main {
     int readsAfterUncompressingT2 = bitMapIndexT2.readCount;
     int writesAfterUncompressingT2 = bitMapIndexT2.writeCount;
 
-    System.out.print("\nAfter Uncompressing T1 -- \n");
+    System.out.print("\nAfter Uncompressing and eliminating duplicates from T1 -- \n");
     System.out.printf("Reads: %d  Writes: %d\n",readsAfterUncompressingT1-readsAfterCompressingT1,writesAfterUncompressingT1-writesAfterCompressingT1);
-    System.out.print("After Uncompressing T2 -- \n");
+    System.out.print("After Uncompressing and eliminating duplicates from T2 -- \n");
     System.out.printf("Reads: %d  Writes: %d\n",readsAfterUncompressingT2-readsAfterCompressingT2,writesAfterUncompressingT2-writesAfterCompressingT2);
 
     Instant executionFinishUncompressed = Instant.now();
     long timeElapsedUncompressed = Duration.between(compressedIndexFinish, executionFinishUncompressed).toMillis();
-    System.out.printf("\nTotal time to create Uncompressed Indexes - %f seconds\n", timeElapsedUncompressed / 1000.0);
-
-    System.out.println("Eliminating duplicates and writing the record file back...\n");
-
-    // BitMapIndex.eliminateDuplicates(bitMapIndexT1,bitMapIndexT2);
-    eliminateDuplicates(String.format("data/output/merged/final/records-%s.txt",bitMapIndexT1.inputFileName), String.format("data/output/merged/final/records-%s.txt",bitMapIndexT2.inputFileName));
+    System.out.printf("\nTotal time to create Uncompressed Indexes & Eliminate Duplicates - %f seconds\n", timeElapsedUncompressed / 1000.0);
+    int[] ioCounts = eliminateDuplicates(String.format("data/output/merged/final/records-%s.txt",bitMapIndexT1.inputFileName), String.format("data/output/merged/final/records-%s.txt",bitMapIndexT2.inputFileName));
     Instant executionFinish = Instant.now();
-
-    System.out.print("After Eliminating Duplicates T1 & T2 (final writes not counted) -- \n");
-    System.out.printf("Reads from Uncompressed Index File: %d\nReads from Record File: %d\n\n", bitMapIndexT1.dupElimIndexReads+bitMapIndexT2.dupElimIndexReads, bitMapIndexT1.dupElimRecordReads+bitMapIndexT2.dupElimRecordReads);
-
-    bitMapIndexT1.readCount += (bitMapIndexT1.dupElimIndexReads + bitMapIndexT1.dupElimRecordReads);
-    bitMapIndexT2.readCount += (bitMapIndexT2.dupElimIndexReads + bitMapIndexT2.dupElimRecordReads);
-
-
-    System.out.printf("Total Reads: %d | Total Writes: %d\n", bitMapIndexT1.readCount+bitMapIndexT2.readCount, bitMapIndexT1.writeCount+bitMapIndexT2.writeCount);
+    System.out.printf("Total Reads: %d | Total Writes: %d\n", bitMapIndexT1.readCount+bitMapIndexT2.readCount+ioCounts[0], bitMapIndexT1.writeCount+bitMapIndexT2.writeCount+ioCounts[1]);
     long timeElapsed = Duration.between(executionStart, executionFinish).toMillis();
     System.out.printf("\nTotal time to create Indexes - %f seconds\n", timeElapsed / 1000.0);
+    printFileSizes();
   }
 
-  private static void eliminateDuplicates(String file1, String file2) throws IOException {
+  private static void printFileSizes() throws IOException {
+    String compressed = "data/output/merged/compressed";
+    String uncompressed = "data/output/merged/uncompressed";
+    String finalOutput = "data/output/merged/final/records.txt";
+    System.out.println("\nCOMPRESSED INDEX SIZES --");
+    Files.walk(Paths.get(compressed))
+            .filter(Files::isRegularFile)
+            .map(Path::toFile)
+            .forEach(file -> System.out.println(file.getName() + " --> SIZE: " + file.length()/1024.0 + " KB"));
+    System.out.println("\nUNCOMPRESSED INDEX SIZES --");
+    Files.walk(Paths.get(uncompressed))
+            .filter(Files::isRegularFile)
+            .map(Path::toFile)
+            .forEach(file -> System.out.println(file.getName() + " --> SIZE: " + file.length()/1024.0 + " KB"));
+    System.out.println("\nFINAL RECORD FILE --");
+    System.out.println(new File(finalOutput).length()/1024.0 + " KB");
+  }
+
+  private static int[] eliminateDuplicates(String file1, String file2) throws IOException {
 
     BufferedWriter bufferedWriter = Files
             .newBufferedWriter(Paths.get("data/output/merged/final/records.txt"));
@@ -115,8 +129,16 @@ public class Main {
     BufferedReader t1 = Files.newBufferedReader(Paths.get(file1));
     BufferedReader t2 = Files.newBufferedReader(Paths.get(file2));
 
+    int recordsWriteCounter = 0;
+    int recordsReadCounter = 0;
+
+    int readIO = 0;
+    int writeIO = 0;
+
     String lineT1 = t1.readLine();
     String lineT2 = t2.readLine();
+
+    recordsReadCounter += 2;
     while (true) {
 
       if(lineT1 == null && lineT2 == null) {
@@ -126,7 +148,15 @@ public class Main {
       if(lineT1 == null) {
         while(lineT2 != null) {
           bufferedWriter.append(lineT2).append(System.lineSeparator());
+          recordsWriteCounter += 1;
           lineT2 = t2.readLine();
+          recordsReadCounter += 1;
+          if(recordsReadCounter % 40 == 0) {
+            readIO += 1;
+          }
+          if(recordsWriteCounter % 40 == 0) {
+            writeIO += 1;
+          }
         }
         break;
       }
@@ -135,6 +165,14 @@ public class Main {
         while(lineT1 != null) {
           bufferedWriter.append(lineT1).append(System.lineSeparator());
           lineT1 = t1.readLine();
+          recordsWriteCounter +=1;
+          recordsReadCounter +=1;
+          if(recordsReadCounter % 40 == 0) {
+            readIO += 1;
+          }
+          if(recordsWriteCounter % 40 == 0) {
+            writeIO += 1;
+          }
         }
         break;
       }
@@ -145,10 +183,26 @@ public class Main {
       if(empT1 < empT2) {
         bufferedWriter.append(lineT1).append(System.lineSeparator());
         lineT1 = t1.readLine();
+        recordsWriteCounter +=1;
+        recordsReadCounter +=1;
+        if(recordsReadCounter % 40 == 0) {
+          readIO += 1;
+        }
+        if(recordsWriteCounter % 40 == 0) {
+          writeIO += 1;
+        }
       }
       else if(empT1 > empT2) {
         bufferedWriter.append(lineT2).append(System.lineSeparator());
         lineT2 = t2.readLine();
+        recordsWriteCounter +=1;
+        recordsReadCounter +=1;
+        if(recordsReadCounter % 40 == 0) {
+          readIO += 1;
+        }
+        if(recordsWriteCounter % 40 == 0) {
+          writeIO += 1;
+        }
       }
       else {
         String dateT1 = lineT1.substring(8, 18);
@@ -156,16 +210,29 @@ public class Main {
 
         if(dateT1.compareTo(dateT2) > 0) {
           bufferedWriter.append(lineT1).append(System.lineSeparator());
+          recordsWriteCounter +=1;
+          if(recordsWriteCounter % 40 == 0) {
+            writeIO += 1;
+          }
         }
         else {
           bufferedWriter.append(lineT2).append(System.lineSeparator());
+          recordsWriteCounter +=1;
+          if(recordsWriteCounter % 40 == 0) {
+            writeIO += 1;
+          }
         }
         lineT1 = t1.readLine();
         lineT2 = t2.readLine();
+        recordsReadCounter += 2;
+        if(recordsReadCounter % 40 == 0) {
+          readIO += 1;
+        }
       }
     }
     t1.close();
     t2.close();
     bufferedWriter.close();
-    }
+    return new int[]{readIO, writeIO};
+  }
 }
