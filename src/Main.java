@@ -1,5 +1,6 @@
 import java.io.*;
 import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.time.Duration;
 import java.time.Instant;
 
@@ -16,6 +17,8 @@ public class Main {
     raf.read(testBuf);
     return testBuf[100] == 10 ? 101 : 100;
   }
+
+
 
   public static void main(String[] args) throws IOException {
     System.out.println("Creating indexes for empId, department, gender");
@@ -88,7 +91,8 @@ public class Main {
 
     System.out.println("Eliminating duplicates and writing the record file back...\n");
 
-    BitMapIndex.eliminateDuplicates(bitMapIndexT1,bitMapIndexT2);
+    // BitMapIndex.eliminateDuplicates(bitMapIndexT1,bitMapIndexT2);
+    eliminateDuplicates(String.format("data/output/merged/final/records-%s.txt",bitMapIndexT1.inputFileName), String.format("data/output/merged/final/records-%s.txt",bitMapIndexT2.inputFileName));
     Instant executionFinish = Instant.now();
 
     System.out.print("After Eliminating Duplicates T1 & T2 (final writes not counted) -- \n");
@@ -102,4 +106,66 @@ public class Main {
     long timeElapsed = Duration.between(executionStart, executionFinish).toMillis();
     System.out.printf("\nTotal time to create Indexes - %f seconds\n", timeElapsed / 1000.0);
   }
+
+  private static void eliminateDuplicates(String file1, String file2) throws IOException {
+
+    BufferedWriter bufferedWriter = Files
+            .newBufferedWriter(Paths.get("data/output/merged/final/records.txt"));
+
+    BufferedReader t1 = Files.newBufferedReader(Paths.get(file1));
+    BufferedReader t2 = Files.newBufferedReader(Paths.get(file2));
+
+    String lineT1 = t1.readLine();
+    String lineT2 = t2.readLine();
+    while (true) {
+
+      if(lineT1 == null && lineT2 == null) {
+        break;
+      }
+
+      if(lineT1 == null) {
+        while(lineT2 != null) {
+          bufferedWriter.append(lineT2).append(System.lineSeparator());
+          lineT2 = t2.readLine();
+        }
+        break;
+      }
+
+      if(lineT2 == null) {
+        while(lineT1 != null) {
+          bufferedWriter.append(lineT1).append(System.lineSeparator());
+          lineT1 = t1.readLine();
+        }
+        break;
+      }
+
+      int empT1 = Integer.parseInt(lineT1.substring(0, 8));
+      int empT2 = Integer.parseInt(lineT2.substring(0, 8));
+
+      if(empT1 < empT2) {
+        bufferedWriter.append(lineT1).append(System.lineSeparator());
+        lineT1 = t1.readLine();
+      }
+      else if(empT1 > empT2) {
+        bufferedWriter.append(lineT2).append(System.lineSeparator());
+        lineT2 = t2.readLine();
+      }
+      else {
+        String dateT1 = lineT1.substring(8, 18);
+        String dateT2 = lineT2.substring(8, 18);
+
+        if(dateT1.compareTo(dateT2) > 0) {
+          bufferedWriter.append(lineT1).append(System.lineSeparator());
+        }
+        else {
+          bufferedWriter.append(lineT2).append(System.lineSeparator());
+        }
+        lineT1 = t1.readLine();
+        lineT2 = t2.readLine();
+      }
+    }
+    t1.close();
+    t2.close();
+    bufferedWriter.close();
+    }
 }

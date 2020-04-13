@@ -15,7 +15,7 @@ public class BitMapIndex {
 
   public int RECORD_SIZE;
   int tuplesInABuffer;
-  private String inputFileName;
+  public String inputFileName;
   private File file;
   private int numberOfRecords;
   public  int writeCount = 0;
