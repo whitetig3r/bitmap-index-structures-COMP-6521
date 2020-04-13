@@ -212,9 +212,16 @@ public class BitMapIndex {
     BufferedWriter bufferedWriterUncompressed = Files
         .newBufferedWriter(uncompressedMergedIndexPath);
     Entry<String, ArrayList<Integer>> entry;
+    RandomAccessFile raf = new RandomAccessFile(file.toString(),"r");
+    BufferedWriter bufferedWriterIntermediate = null;
+    if(fieldEnum == FieldEnum.EMP_ID) {
+      bufferedWriterIntermediate = Files
+              .newBufferedWriter(Paths.get(String.format("data/output/merged/final/records-%s.txt",inputFileName, true)));
+    }
     while ((entry = partialIndexReader.getNextIndex(this)) != null) {
       int loopBytesWrittenCounter = 0;
       bufferedWriterUncompressed.append(entry.getKey());
+      loopBytesWrittenCounter += entry.getKey().length();
       int sum = 0;
       for (Integer run : entry.getValue()) {
         sum += run + 1;
@@ -226,9 +233,25 @@ public class BitMapIndex {
         sum++;
       }
       bufferedWriterUncompressed.append(System.lineSeparator());
+      if(fieldEnum == FieldEnum.EMP_ID) {
+        Integer acc = 0;
+        String latestRecord = null;
+        for (Integer currentRun : entry.getValue()) {
+          acc = acc + currentRun + 1;
+          UnaryOperator<Integer> getSeek = (index) -> (index - 1) * RECORD_SIZE;
+          long seekCurrentIndex = getSeek.apply(acc);
+          String currentLatestRecord = Main.getRecord(seekCurrentIndex, raf, this);
+          if (currentLatestRecord == null) break;
+          if (latestRecord == null || (latestRecord.compareTo(currentLatestRecord) < 0)) {
+            latestRecord = currentLatestRecord;
+          }
+        }
+        bufferedWriterIntermediate.append(latestRecord).append(System.lineSeparator());
+      }
       loopBytesWrittenCounter += System.lineSeparator().length();
       localBytesWrittenCounter += loopBytesWrittenCounter;
     }
+    if(fieldEnum == FieldEnum.EMP_ID) bufferedWriterIntermediate.close();
     writeCount += (int)Math.ceil(localBytesWrittenCounter/4096.0);
     bufferedWriterUncompressed.close();
   }
