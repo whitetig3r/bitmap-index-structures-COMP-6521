@@ -95,9 +95,9 @@ public class Main {
     Instant executionFinishUncompressed = Instant.now();
     long timeElapsedUncompressed = Duration.between(compressedIndexFinish, executionFinishUncompressed).toMillis();
     System.out.printf("\nTotal time to create Uncompressed Indexes & Eliminate Duplicates - %f seconds\n", timeElapsedUncompressed / 1000.0);
-    int[] ioCounts = eliminateDuplicates(String.format("data/output/merged/final/records-%s.txt",bitMapIndexT1.inputFileName), String.format("data/output/merged/final/records-%s.txt",bitMapIndexT2.inputFileName));
+    int ioCount = eliminateDuplicates(String.format("data/output/merged/final/records-%s.txt",bitMapIndexT1.inputFileName), String.format("data/output/merged/final/records-%s.txt",bitMapIndexT2.inputFileName));
     Instant executionFinish = Instant.now();
-    System.out.printf("Total Reads: %d | Total Writes: %d\n", bitMapIndexT1.readCount+bitMapIndexT2.readCount+ioCounts[0], bitMapIndexT1.writeCount+bitMapIndexT2.writeCount+ioCounts[1]);
+    System.out.printf("Total Reads: %d | Total Writes: %d\n", bitMapIndexT1.readCount+bitMapIndexT2.readCount+ioCount, bitMapIndexT1.writeCount+bitMapIndexT2.writeCount);
     long timeElapsed = Duration.between(executionStart, executionFinish).toMillis();
     System.out.printf("\nTotal time to create Indexes - %f seconds\n", timeElapsed / 1000.0);
     printFileSizes();
@@ -121,7 +121,7 @@ public class Main {
     System.out.println(new File(finalOutput).length()/1024.0 + " KB");
   }
 
-  private static int[] eliminateDuplicates(String file1, String file2) throws IOException {
+  private static int eliminateDuplicates(String file1, String file2) throws IOException {
 
     BufferedWriter bufferedWriter = Files
             .newBufferedWriter(Paths.get("data/output/merged/final/records.txt"));
@@ -129,11 +129,9 @@ public class Main {
     BufferedReader t1 = Files.newBufferedReader(Paths.get(file1));
     BufferedReader t2 = Files.newBufferedReader(Paths.get(file2));
 
-    int recordsWriteCounter = 0;
     int recordsReadCounter = 0;
 
     int readIO = 0;
-    int writeIO = 0;
 
     String lineT1 = t1.readLine();
     String lineT2 = t2.readLine();
@@ -148,14 +146,10 @@ public class Main {
       if(lineT1 == null) {
         while(lineT2 != null) {
           bufferedWriter.append(lineT2).append(System.lineSeparator());
-          recordsWriteCounter += 1;
           lineT2 = t2.readLine();
           recordsReadCounter += 1;
           if(recordsReadCounter % 40 == 0) {
             readIO += 1;
-          }
-          if(recordsWriteCounter % 40 == 0) {
-            writeIO += 1;
           }
         }
         break;
@@ -165,13 +159,9 @@ public class Main {
         while(lineT1 != null) {
           bufferedWriter.append(lineT1).append(System.lineSeparator());
           lineT1 = t1.readLine();
-          recordsWriteCounter +=1;
           recordsReadCounter +=1;
           if(recordsReadCounter % 40 == 0) {
             readIO += 1;
-          }
-          if(recordsWriteCounter % 40 == 0) {
-            writeIO += 1;
           }
         }
         break;
@@ -183,25 +173,17 @@ public class Main {
       if(empT1 < empT2) {
         bufferedWriter.append(lineT1).append(System.lineSeparator());
         lineT1 = t1.readLine();
-        recordsWriteCounter +=1;
         recordsReadCounter +=1;
         if(recordsReadCounter % 40 == 0) {
           readIO += 1;
-        }
-        if(recordsWriteCounter % 40 == 0) {
-          writeIO += 1;
         }
       }
       else if(empT1 > empT2) {
         bufferedWriter.append(lineT2).append(System.lineSeparator());
         lineT2 = t2.readLine();
-        recordsWriteCounter +=1;
         recordsReadCounter +=1;
         if(recordsReadCounter % 40 == 0) {
           readIO += 1;
-        }
-        if(recordsWriteCounter % 40 == 0) {
-          writeIO += 1;
         }
       }
       else {
@@ -210,17 +192,9 @@ public class Main {
 
         if(dateT1.compareTo(dateT2) > 0) {
           bufferedWriter.append(lineT1).append(System.lineSeparator());
-          recordsWriteCounter +=1;
-          if(recordsWriteCounter % 40 == 0) {
-            writeIO += 1;
-          }
         }
         else {
           bufferedWriter.append(lineT2).append(System.lineSeparator());
-          recordsWriteCounter +=1;
-          if(recordsWriteCounter % 40 == 0) {
-            writeIO += 1;
-          }
         }
         lineT1 = t1.readLine();
         lineT2 = t2.readLine();
@@ -233,6 +207,6 @@ public class Main {
     t1.close();
     t2.close();
     bufferedWriter.close();
-    return new int[]{readIO, writeIO};
+    return readIO;
   }
 }
